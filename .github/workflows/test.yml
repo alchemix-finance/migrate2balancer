@@ -1,16 +1,13 @@
 name: test
 
-on: workflow_dispatch
-
-env:
-  FOUNDRY_PROFILE: ci
+on: [pull_request]
 
 jobs:
   check:
     strategy:
       fail-fast: true
 
-    name: Foundry project
+    name: Runs foundry tests for sushi to balancer migrator 
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -21,6 +18,9 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
+      
+      - name: Install submodules
+        run: git submodule update --init --recursive
 
       - name: Run Forge build
         run: |
@@ -28,7 +28,8 @@ jobs:
           forge build --sizes
         id: build
 
-      - name: Run Forge tests
-        run: |
-          forge test -vvv
-        id: test
+      - name: Run tests and coverage
+        env:
+          ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
+          TEST_PROFILE: default
+          run: ./test.sh

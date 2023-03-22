@@ -1,14 +1,8 @@
-# Compiler files
+.vscode/
+.env
+.DS_Store
 cache/
 out/
-
-# Ignores development broadcast logs
-!/broadcast
-/broadcast/*/31337/
-/broadcast/**/dry-run/
-
-# Docs
-docs/
-
-# Dotenv file
-.env
+report/
+lcov.info
+notes.md
