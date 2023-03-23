@@ -14,6 +14,8 @@ import "src/interfaces/balancer/IBasePool.sol";
 import "src/interfaces/balancer/IAsset.sol";
 import "src/interfaces/balancer/IManagedPool.sol";
 import "src/interfaces/balancer/FixedPoint.sol";
+import "src/interfaces/balancer/WeightedMath.sol";
+import "src/interfaces/aura/IRewardPool4626.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
@@ -62,7 +64,7 @@ contract Migrator is IMigrator {
         priceFeed = AggregatorV3Interface(params.priceFeed);
         sushiRouter = IUniswapV2Router02(params.sushiRouter);
         balancerVault = IVault(params.balancerVault);
-        balancerPool = IBasePool(bpt);
+        balancerPool = IBasePool(address(bpt));
         balancerPoolId = balancerPool.getPoolId();
         poolAssets[0] = IAsset(address(weth));
         poolAssets[1] = IAsset(params.alcx);
@@ -108,7 +110,7 @@ contract Migrator is IMigrator {
     function swapEthForAlcx() public {
         (uint256 ethRequired, ) = calculateEthWeight(alcx.balanceOf(address(this)));
         // logic to sell fixed % of eth
-        // (, int256 alcxEthPrice, , , ) = priceFeed.latestRoundData();
+        (, int256 alcxEthPrice, , , ) = priceFeed.latestRoundData();
         // uint256 amountEth = (address(this).balance * bpsEthToSwap) / BPS;
         uint256 amountEth = address(this).balance - ethRequired;
         uint256 minAmountOut = (amountEth * uint256(alcxEthPrice)) / 1 ether;
@@ -120,13 +122,13 @@ contract Migrator is IMigrator {
             assetIn: IAsset(address(0)),
             assetOut: IAsset(address(alcx)),
             amount: amountEth,
-            userData: bytes(0)
+            userData: bytes("")
         });
 
         IVault.FundManagement memory funds = IVault.FundManagement({
             sender: address(this),
             fromInternalBalance: false,
-            recipient: address(this),
+            recipient: payable(address(this)),
             toInternalBalance: false
         });
 
@@ -185,7 +187,7 @@ contract Migrator is IMigrator {
     function depositIntoRewardsPool() public {
         uint256 amount = bpt.balanceOf(address(this));
 
-        bpt.approve(auraPool, amount);
+        bpt.approve(address(auraPool), amount);
         auraPool.deposit(amount, address(this));
     }
 
@@ -209,4 +211,6 @@ contract Migrator is IMigrator {
         if (stakeBpt) depositIntoRewardsPool();
         else bpt.safeTransferFrom(address(this), msg.sender, bpt.balanceOf(address(this)));
     }
+
+    receive() external payable {}
 }

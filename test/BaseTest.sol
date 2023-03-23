@@ -8,7 +8,7 @@ import "src/interfaces/IMigrator.sol";
 contract BaseTest is DSTestPlus {
     Migrator public migrator;
 
-    // Initialization params
+    // Initialization variables
     uint256 public alchemixPoolId = 2;
     uint256 public sushiPoolId = 0;
     address public weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
@@ -22,6 +22,12 @@ contract BaseTest is DSTestPlus {
     address public priceFeed = 0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa;
     address public sushiRouter = 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F;
     address public balancerVault = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
+
+    // Test variables
+    address public user = address(0xbeef);
+    uint256 public TOKEN_1 = 1e18;
+    uint256 public TOKEN_100K = 1e23;
+    uint256 constant TOKEN_1M = 1e24;
 
     function setUp() public {
         IMigrator.InitializationParams memory params = IMigrator.InitializationParams(
@@ -41,5 +47,15 @@ contract BaseTest is DSTestPlus {
         );
 
         migrator = new Migrator(params);
+
+        deal(slp, user, TOKEN_1M);
+
+        // Create user with half of SLP in sushi staking pool
+        hevm.startPrank(user);
+
+        IERC20(slp).approve(sushiStakingPool, TOKEN_100K);
+        IMiniChefV2(sushiStakingPool).deposit(sushiPoolId, TOKEN_100K, user);
+
+        hevm.stopPrank();
     }
 }
