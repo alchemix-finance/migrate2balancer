@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3
 pragma solidity ^0.8.15;
 
+import "lib/forge-std/src/console2.sol";
+
 import "src/interfaces/IMigrator.sol";
 import "src/interfaces/IWETH9.sol";
 import "src/interfaces/chainlink/AggregatorV3Interface.sol";
@@ -18,49 +20,46 @@ import "src/interfaces/balancer/WeightedMath.sol";
 import "src/interfaces/aura/IRewardPool4626.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 /**
  * @title  Sushi to Balancer migrator
  * @notice Tool to facilitate migrating a sushi SLP position into a balancer BPT position
  */
-contract Migrator is IMigrator {
+contract Migrator is IMigrator, Ownable {
     using SafeERC20 for IERC20;
 
-    uint256 internal constant BPS = 10_000;
+    uint256 internal constant BPS = 10000;
+    uint256 public slippage = 10; // 0.1%
     uint256 public bpsEthToSwap = 6000; // 60%
 
     uint256 public alchemixPoolId;
     uint256 public sushiPoolId;
-    uint256 public slippage;
 
     bytes32 public balancerPoolId;
 
+    address public admin;
+
     IWETH9 public weth;
     IERC20 public alcx;
-    IERC20 public sushi;
     IERC20 public bpt;
     IUniswapV2Pair public slp;
     IRewardPool4626 public auraPool;
-    IStakingPools public alchemixStakingPool;
-    IMiniChefV2 public sushiStakingPool;
     AggregatorV3Interface public priceFeed;
-    IVault public balancerVault;
     IUniswapV2Router02 public sushiRouter;
+    IVault public balancerVault;
     IBasePool public balancerPool;
     IAsset[] public poolAssets = new IAsset[](2);
 
-    constructor(InitializationParams memory params) {
+    constructor(InitializationParams memory params) Ownable() {
         alchemixPoolId = params.alchemixPoolId;
         sushiPoolId = params.sushiPoolId;
 
         weth = IWETH9(params.weth);
         alcx = IERC20(params.alcx);
-        sushi = IERC20(params.sushi);
         bpt = IERC20(params.bpt);
         slp = IUniswapV2Pair(params.slp);
         auraPool = IRewardPool4626(params.auraPool);
-        alchemixStakingPool = IStakingPools(params.alchemixStakingPool);
-        sushiStakingPool = IMiniChefV2(params.sushiStakingPool);
         priceFeed = AggregatorV3Interface(params.priceFeed);
         sushiRouter = IUniswapV2Router02(params.sushiRouter);
         balancerVault = IVault(params.balancerVault);
@@ -73,45 +72,59 @@ contract Migrator is IMigrator {
     }
 
     /*
+        Admin functions
+    */
+
+    /// @inheritdoc IMigrator
+    function setUnrwapSlippage(uint256 _amount) external onlyOwner {
+        require(_amount <= BPS, "slippage too high");
+        slippage = _amount;
+    }
+
+    /*
         Public functions
     */
 
     /// @inheritdoc IMigrator
-    function withdrawFromSushiPool() public {
-        sushiStakingPool.withdrawAndHarvest(sushiPoolId, slp.balanceOf(msg.sender), address(this));
+    function calculateSlpAmounts(uint256 _slpAmount) public view returns (uint256, uint256) {
+        uint256 slpSupply = slp.totalSupply();
+        (uint256 wethReserves, uint256 alcxReserves, ) = slp.getReserves();
 
-        uint256 sushiRewards = sushi.balanceOf(address(this));
+        // Calculate the amount of tokens and ETH the user will receive
+        uint256 amountToken = (_slpAmount * alcxReserves) / slpSupply;
+        uint256 amountEth = (_slpAmount * wethReserves) / slpSupply;
 
-        // Transfer any sushi rewards
-        if (sushiRewards > 0) sushi.safeTransferFrom(address(this), msg.sender, sushiRewards);
-    }
+        // Calculate the minimum amounts with slippage tolerance
+        uint256 amountTokenMin = (amountToken * (BPS - slippage)) / BPS;
+        uint256 amountEthMin = (amountEth * (BPS - slippage)) / BPS;
 
-    /// @inheritdoc IMigrator
-    function withdrawFromAlchemixPool() public {
-        alchemixStakingPool.exit(alchemixPoolId);
+        return (amountTokenMin, amountEthMin);
     }
 
     /// @inheritdoc IMigrator
     function unwrapSlp() public {
-        uint256 deadline = block.timestamp;
-        uint256 slpSupply = slp.totalSupply();
+        uint256 deadline = block.timestamp + 300;
         uint256 slpAmount = slp.balanceOf(msg.sender);
-        uint256 slpRatio = FixedPoint.divDown(slpAmount, slpSupply);
+        // uint256 slpRatio = FixedPoint.divDown(slpAmount, slpSupply);
 
-        (uint256 wethReserves, uint256 alcxReserves, ) = slp.getReserves();
+        (uint256 amountTokenMin, uint256 amountEthMin) = calculateSlpAmounts(slpAmount);
 
-        uint256 amountEthMin = FixedPoint.mulDown(wethReserves, slpRatio);
-        uint256 amountAlcxMin = FixedPoint.mulDown(alcxReserves, slpRatio);
+        // uint256 amountEthMin = FixedPoint.mulDown(wethReserves, slpRatio);
+        // uint256 amountAlcxMin = FixedPoint.mulDown(alcxReserves, slpRatio);
 
-        sushiRouter.removeLiquidityETH(address(alcx), slpAmount, amountAlcxMin, amountEthMin, address(this), deadline);
+        slp.approve(address(sushiRouter), slpAmount);
+        sushiRouter.removeLiquidityETH(address(alcx), slpAmount, amountTokenMin, amountEthMin, address(this), deadline);
     }
 
     /// @inheritdoc IMigrator
     function swapEthForAlcx() public {
         (uint256 ethRequired, ) = calculateEthWeight(alcx.balanceOf(address(this)));
+        require(address(this).balance > ethRequired, "contract doesn't have enough eth");
+
         // logic to sell fixed % of eth
         (, int256 alcxEthPrice, , , ) = priceFeed.latestRoundData();
         // uint256 amountEth = (address(this).balance * bpsEthToSwap) / BPS;
+
         uint256 amountEth = address(this).balance - ethRequired;
         uint256 minAmountOut = (amountEth * uint256(alcxEthPrice)) / 1 ether;
         uint256 deadline = block.timestamp;
@@ -195,9 +208,8 @@ contract Migrator is IMigrator {
         External functions
     */
 
-    function migrate(bool fromSlpFarm, bool fromAlcxFarm, bool stakeBpt) external {
-        if (fromSlpFarm) withdrawFromSushiPool();
-        if (fromAlcxFarm) withdrawFromAlchemixPool();
+    function migrate(bool stakeBpt) external {
+        IERC20(address(slp)).safeTransferFrom(msg.sender, address(this), slp.balanceOf(msg.sender));
 
         unwrapSlp();
 
@@ -205,6 +217,8 @@ contract Migrator is IMigrator {
 
         uint256 alcxAmount = alcx.balanceOf(address(this));
         (uint256 ethAmount, uint256[] memory normalizedWeights) = calculateEthWeight(alcxAmount);
+
+        // weth.deposit{ value: ethAmount }();
 
         depositIntoBalancerPool(ethAmount, alcxAmount, normalizedWeights);
 

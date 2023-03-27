@@ -7,27 +7,27 @@ interface IMigrator {
         uint256 sushiPoolId;
         address weth;
         address alcx;
-        address sushi;
         address bpt;
         address slp;
         address auraPool;
-        address alchemixStakingPool;
-        address sushiStakingPool;
         address priceFeed;
         address sushiRouter;
         address balancerVault;
     }
 
     /**
-     * @notice Withdraw SLP from sushi staking pool, claiming any ALCX and SUSHI rewards
-     * @dev SUSHI rewards are sent to the account that is migrating
+     * @notice Update the slippage for unwraping SLP tokens
+     * @param _amount The updated slippage amount in bps
+     * @dev This function is only callable by the contract owner.
      */
-    function withdrawFromSushiPool() external;
+    function setUnrwapSlippage(uint256 _amount) external;
 
     /**
-     * @notice Withdraw SLP from alchemix staking pool, claiming any ALCX rewards
+     * @notice Calculate the min amount of ALCX and ETH for a given SLP amount
+     * @param _slpAmount The amount of SLP
+     * @return Return values for min amount out of ALCX and ETH with slippage
      */
-    function withdrawFromAlchemixPool() external;
+    function calculateSlpAmounts(uint256 _slpAmount) external view returns (uint256, uint256);
 
     /**
      * @notice Unrwap SLP into ALCX and ETH
@@ -66,9 +66,7 @@ interface IMigrator {
 
     /**
      * @notice Migrate SLP position into BPT position
-     * @param fromSlpFarm indicate if migrating from sushi staking pool
-     * @param fromAlcxFarm indicate if migrating from alchemix staking pool
      * @param stakeBpt indicate if staking BPT in Aura
      */
-    function migrate(bool fromSlpFarm, bool stakeBpt, bool fromAlcxFarm) external;
+    function migrate(bool stakeBpt) external;
 }
