@@ -16,6 +16,12 @@ interface IMigrator {
     }
 
     /**
+     * @notice Initialize the contract
+     * @param params The contract initialization params
+     */
+    function initialize(InitializationParams memory params) external;
+
+    /**
      * @notice Update the slippage for unwraping SLP tokens
      * @param _amount The updated slippage amount in bps
      * @dev This function is only callable by the contract owner.

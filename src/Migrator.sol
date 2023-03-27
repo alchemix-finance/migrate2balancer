@@ -21,15 +21,18 @@ import "src/interfaces/aura/IRewardPool4626.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
+import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
+import "openzeppelin-contracts/contracts/proxy/transparent/ProxyAdmin.sol";
+import "openzeppelin-contracts/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 /**
  * @title  Sushi to Balancer migrator
  * @notice Tool to facilitate migrating a sushi SLP position into a balancer BPT position
  */
-contract Migrator is IMigrator, Ownable {
+contract Migrator is IMigrator, Initializable, Ownable {
     using SafeERC20 for IERC20;
 
-    uint256 internal constant BPS = 10000;
+    uint256 public BPS = 10000;
     uint256 public slippage = 10; // 0.1%
     uint256 public bpsEthToSwap = 6000; // 60%
 
@@ -37,8 +40,6 @@ contract Migrator is IMigrator, Ownable {
     uint256 public sushiPoolId;
 
     bytes32 public balancerPoolId;
-
-    address public admin;
 
     IWETH9 public weth;
     IERC20 public alcx;
@@ -51,7 +52,12 @@ contract Migrator is IMigrator, Ownable {
     IBasePool public balancerPool;
     IAsset[] public poolAssets = new IAsset[](2);
 
-    constructor(InitializationParams memory params) Ownable() {
+    /*
+        Admin functions
+    */
+
+    /// @inheritdoc IMigrator
+    function initialize(InitializationParams memory params) external initializer onlyOwner {
         alchemixPoolId = params.alchemixPoolId;
         sushiPoolId = params.sushiPoolId;
 
@@ -70,10 +76,6 @@ contract Migrator is IMigrator, Ownable {
 
         weth.approve(address(balancerVault), type(uint256).max);
     }
-
-    /*
-        Admin functions
-    */
 
     /// @inheritdoc IMigrator
     function setUnrwapSlippage(uint256 _amount) external onlyOwner {
@@ -208,6 +210,7 @@ contract Migrator is IMigrator, Ownable {
         External functions
     */
 
+    /// @inheritdoc IMigrator
     function migrate(bool stakeBpt) external {
         IERC20(address(slp)).safeTransferFrom(msg.sender, address(this), slp.balanceOf(msg.sender));
 

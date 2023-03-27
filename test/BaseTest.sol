@@ -8,6 +8,8 @@ import "src/interfaces/IMigrator.sol";
 
 contract BaseTest is DSTestPlus {
     Migrator public migrator;
+    ProxyAdmin public proxyAdmin;
+    TransparentUpgradeableProxy migratorProxy;
 
     // Initialization variables
     uint256 public alchemixPoolId = 2;
@@ -27,6 +29,7 @@ contract BaseTest is DSTestPlus {
     uint256 public TOKEN_1 = 1e18;
     uint256 public TOKEN_100K = 1e23;
     uint256 public TOKEN_1M = 1e24;
+    uint256 public BPS = 10000;
 
     function setUp() public {
         user = hevm.addr(userPrivateKey);
@@ -44,8 +47,9 @@ contract BaseTest is DSTestPlus {
             address(balancerVault)
         );
 
-        migrator = new Migrator(params);
-
-        deal(address(slp), user, TOKEN_1M);
+        migrator = new Migrator();
+        proxyAdmin = new ProxyAdmin();
+        migratorProxy = new TransparentUpgradeableProxy(address(migrator), address(proxyAdmin), "");
+        migrator.initialize(params);
     }
 }
