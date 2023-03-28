@@ -8,6 +8,7 @@ interface IMigrator {
         address weth;
         address alcx;
         address bpt;
+        address auraBpt;
         address slp;
         address auraPool;
         address priceFeed;
@@ -29,41 +30,40 @@ interface IMigrator {
     function setUnrwapSlippage(uint256 _amount) external;
 
     /**
-     * @notice Calculate the min amount of ALCX and ETH for a given SLP amount
+     * @notice Update the slippage for swapping WETH for ALCX
+     * @param _amount The updated slippage amount in bps
+     * @dev This function is only callable by the contract owner.
+     */
+    function setSwapSlippage(uint256 _amount) external;
+
+    /**
+     * @notice Calculate the min amount of ALCX and WETH for a given SLP amount
      * @param _slpAmount The amount of SLP
-     * @return Return values for min amount out of ALCX and ETH with slippage
+     * @return Return values for min amount out of ALCX and WETH with unwrap slippage
      */
     function calculateSlpAmounts(uint256 _slpAmount) external view returns (uint256, uint256);
 
     /**
-     * @notice Unrwap SLP into ALCX and ETH
+     * @notice Unrwap SLP into ALCX and WETH
      */
     function unwrapSlp() external;
 
     /**
-     * @notice Swap ETH for ALCX to have balanced 80/20 ALCX/ETH
+     * @notice Swap WETH for ALCX to have balanced 80/20 ALCX/WETH
      */
-    function swapEthForAlcx() external;
+    function swapWethForAlcxBalancer() external;
 
     /**
-     * @notice Get the amount of ETH or WETH required to create balanced pool deposit
+     * @notice Get the amount WETH required to create balanced pool deposit
      * @param _alcxAmount Amount of ALCX to deposit
-     * @return uint256 Amount of ETH or WETH required to create 80/20 balanced deposit
-     * @return uint256[] Normalized weights of the pool. Prevents an additional lookup of weights
+     * @return uint256 Amount of WETH required to create 80/20 balanced deposit
      */
-    function calculateEthWeight(uint256 _alcxAmount) external view returns (uint256, uint256[] memory);
+    function calculateWethWeight(uint256 _alcxAmount) external view returns (uint256);
 
     /**
      * @notice Deposit into ALCX/WETH 80/20 balancer pool
-     * @param _wethAmount Amount of WETH to deposit into pool
-     * @param _alcxAmount Amount of ALCX to deposit into pool
-     * @param _normalizedWeights Weight of ALCX and WETH
      */
-    function depositIntoBalancerPool(
-        uint256 _wethAmount,
-        uint256 _alcxAmount,
-        uint256[] memory _normalizedWeights
-    ) external;
+    function depositIntoBalancerPool() external;
 
     /**
      * @notice Deposit BPT into rewards pool

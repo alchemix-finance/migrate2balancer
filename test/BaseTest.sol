@@ -17,6 +17,7 @@ contract BaseTest is DSTestPlus {
     IWETH9 public weth = IWETH9(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     IERC20 public alcx = IERC20(0xdBdb4d16EdA451D0503b854CF79D55697F90c8DF);
     IERC20 public bpt = IERC20(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
+    IERC20 public auraBpt = IERC20(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
     IUniswapV2Pair public slp = IUniswapV2Pair(0xC3f279090a47e80990Fe3a9c30d24Cb117EF91a8);
     IRewardPool4626 public auraPool = IRewardPool4626(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
     AggregatorV3Interface public priceFeed = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
@@ -40,6 +41,7 @@ contract BaseTest is DSTestPlus {
             address(weth),
             address(alcx),
             address(bpt),
+            address(auraBpt),
             address(slp),
             address(auraPool),
             address(priceFeed),

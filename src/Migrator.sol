@@ -33,8 +33,8 @@ contract Migrator is IMigrator, Initializable, Ownable {
     using SafeERC20 for IERC20;
 
     uint256 public BPS = 10000;
-    uint256 public slippage = 10; // 0.1%
-    uint256 public bpsEthToSwap = 6000; // 60%
+    uint256 public unrwapSlippage = 10; // 0.1%
+    uint256 public swapSlippage = 10; // 0.1%
 
     uint256 public alchemixPoolId;
     uint256 public sushiPoolId;
@@ -44,6 +44,7 @@ contract Migrator is IMigrator, Initializable, Ownable {
     IWETH9 public weth;
     IERC20 public alcx;
     IERC20 public bpt;
+    IERC20 public auraBpt;
     IUniswapV2Pair public slp;
     IRewardPool4626 public auraPool;
     AggregatorV3Interface public priceFeed;
@@ -64,6 +65,7 @@ contract Migrator is IMigrator, Initializable, Ownable {
         weth = IWETH9(params.weth);
         alcx = IERC20(params.alcx);
         bpt = IERC20(params.bpt);
+        auraBpt = IERC20(params.auraBpt);
         slp = IUniswapV2Pair(params.slp);
         auraPool = IRewardPool4626(params.auraPool);
         priceFeed = AggregatorV3Interface(params.priceFeed);
@@ -75,12 +77,21 @@ contract Migrator is IMigrator, Initializable, Ownable {
         poolAssets[1] = IAsset(params.alcx);
 
         weth.approve(address(balancerVault), type(uint256).max);
+        alcx.approve(address(balancerVault), type(uint256).max);
+        bpt.approve(address(auraPool), type(uint256).max);
+        slp.approve(address(sushiRouter), type(uint256).max);
     }
 
     /// @inheritdoc IMigrator
     function setUnrwapSlippage(uint256 _amount) external onlyOwner {
-        require(_amount <= BPS, "slippage too high");
-        slippage = _amount;
+        require(_amount <= BPS, "unwrap slippage too high");
+        unrwapSlippage = _amount;
+    }
+
+    /// @inheritdoc IMigrator
+    function setSwapSlippage(uint256 _amount) external onlyOwner {
+        require(_amount <= BPS, "swap slippage too high");
+        swapSlippage = _amount;
     }
 
     /*
@@ -92,51 +103,52 @@ contract Migrator is IMigrator, Initializable, Ownable {
         uint256 slpSupply = slp.totalSupply();
         (uint256 wethReserves, uint256 alcxReserves, ) = slp.getReserves();
 
-        // Calculate the amount of tokens and ETH the user will receive
+        // Calculate the amount of tokens and WETH the user will receive
         uint256 amountToken = (_slpAmount * alcxReserves) / slpSupply;
-        uint256 amountEth = (_slpAmount * wethReserves) / slpSupply;
+        uint256 amountWeth = (_slpAmount * wethReserves) / slpSupply;
 
-        // Calculate the minimum amounts with slippage tolerance
-        uint256 amountTokenMin = (amountToken * (BPS - slippage)) / BPS;
-        uint256 amountEthMin = (amountEth * (BPS - slippage)) / BPS;
+        // Calculate the minimum amounts with unrwapSlippage tolerance
+        uint256 amountTokenMin = (amountToken * (BPS - unrwapSlippage)) / BPS;
+        uint256 amountWethMin = (amountWeth * (BPS - unrwapSlippage)) / BPS;
 
-        return (amountTokenMin, amountEthMin);
+        return (amountTokenMin, amountWethMin);
     }
 
     /// @inheritdoc IMigrator
     function unwrapSlp() public {
         uint256 deadline = block.timestamp + 300;
         uint256 slpAmount = slp.balanceOf(msg.sender);
-        // uint256 slpRatio = FixedPoint.divDown(slpAmount, slpSupply);
 
-        (uint256 amountTokenMin, uint256 amountEthMin) = calculateSlpAmounts(slpAmount);
+        (uint256 amountTokenMin, uint256 amountWethMin) = calculateSlpAmounts(slpAmount);
 
-        // uint256 amountEthMin = FixedPoint.mulDown(wethReserves, slpRatio);
-        // uint256 amountAlcxMin = FixedPoint.mulDown(alcxReserves, slpRatio);
-
-        slp.approve(address(sushiRouter), slpAmount);
-        sushiRouter.removeLiquidityETH(address(alcx), slpAmount, amountTokenMin, amountEthMin, address(this), deadline);
+        sushiRouter.removeLiquidityETH(
+            address(alcx),
+            slpAmount,
+            amountTokenMin,
+            amountWethMin,
+            address(this),
+            deadline
+        );
     }
 
     /// @inheritdoc IMigrator
-    function swapEthForAlcx() public {
-        (uint256 ethRequired, ) = calculateEthWeight(alcx.balanceOf(address(this)));
-        require(address(this).balance > ethRequired, "contract doesn't have enough eth");
+    function swapWethForAlcxBalancer() public {
+        uint256 wethRequired = calculateWethWeight(alcx.balanceOf(address(this)));
+        uint256 wethBalance = weth.balanceOf(address(this));
+        require(wethBalance > wethRequired, "contract doesn't have enough weth");
 
-        // logic to sell fixed % of eth
         (, int256 alcxEthPrice, , , ) = priceFeed.latestRoundData();
-        // uint256 amountEth = (address(this).balance * bpsEthToSwap) / BPS;
 
-        uint256 amountEth = address(this).balance - ethRequired;
-        uint256 minAmountOut = (amountEth * uint256(alcxEthPrice)) / 1 ether;
+        uint256 amountWeth = wethBalance - wethRequired;
+        uint256 minAmountOut = (((amountWeth * uint256(alcxEthPrice)) / (1 ether)) * (BPS - swapSlippage)) / BPS;
         uint256 deadline = block.timestamp;
 
         IVault.SingleSwap memory singleSwap = IVault.SingleSwap({
             poolId: balancerPoolId,
             kind: IVault.SwapKind.GIVEN_IN,
-            assetIn: IAsset(address(0)),
+            assetIn: IAsset(address(weth)),
             assetOut: IAsset(address(alcx)),
-            amount: amountEth,
+            amount: amountWeth,
             userData: bytes("")
         });
 
@@ -151,7 +163,7 @@ contract Migrator is IMigrator, Initializable, Ownable {
     }
 
     /// @inheritdoc IMigrator
-    function calculateEthWeight(uint256 _alcxAmount) public view returns (uint256, uint256[] memory) {
+    function calculateWethWeight(uint256 _alcxAmount) public view returns (uint256) {
         (, int256 alcxEthPrice, , , ) = priceFeed.latestRoundData();
 
         uint256[] memory normalizedWeights = IManagedPool(address(balancerPool)).getNormalizedWeights();
@@ -159,24 +171,24 @@ contract Migrator is IMigrator, Initializable, Ownable {
         uint256 amount = (((_alcxAmount * uint256(alcxEthPrice)) / 1 ether) * normalizedWeights[0]) /
             normalizedWeights[1];
 
-        return (amount, normalizedWeights);
+        return (amount);
     }
 
     /// @inheritdoc IMigrator
-    function depositIntoBalancerPool(
-        uint256 _wethAmount,
-        uint256 _alcxAmount,
-        uint256[] memory _normalizedWeights
-    ) public {
+    function depositIntoBalancerPool() public {
+        uint256[] memory normalizedWeights = IManagedPool(address(balancerPool)).getNormalizedWeights();
         (, uint256[] memory balances, ) = balancerVault.getPoolTokens(balancerPoolId);
 
+        uint256 wethAmount = weth.balanceOf(address(this));
+        uint256 alcxAmount = alcx.balanceOf(address(this));
+
         uint256[] memory amountsIn = new uint256[](2);
-        amountsIn[0] = _wethAmount;
-        amountsIn[1] = _alcxAmount;
+        amountsIn[0] = wethAmount;
+        amountsIn[1] = alcxAmount;
 
         uint256 bptAmountOut = WeightedMath._calcBptOutGivenExactTokensIn(
             balances,
-            _normalizedWeights,
+            normalizedWeights,
             amountsIn,
             IERC20(address(balancerPool)).totalSupply(),
             balancerPool.getSwapFeePercentage()
@@ -202,7 +214,6 @@ contract Migrator is IMigrator, Initializable, Ownable {
     function depositIntoRewardsPool() public {
         uint256 amount = bpt.balanceOf(address(this));
 
-        bpt.approve(address(auraPool), amount);
         auraPool.deposit(amount, address(this));
     }
 
@@ -211,23 +222,22 @@ contract Migrator is IMigrator, Initializable, Ownable {
     */
 
     /// @inheritdoc IMigrator
-    function migrate(bool stakeBpt) external {
+    function migrate(bool _stakeBpt) external {
         IERC20(address(slp)).safeTransferFrom(msg.sender, address(this), slp.balanceOf(msg.sender));
 
         unwrapSlp();
 
-        swapEthForAlcx();
+        swapWethForAlcxBalancer();
 
-        uint256 alcxAmount = alcx.balanceOf(address(this));
-        (uint256 ethAmount, uint256[] memory normalizedWeights) = calculateEthWeight(alcxAmount);
+        depositIntoBalancerPool();
 
-        // weth.deposit{ value: ethAmount }();
-
-        depositIntoBalancerPool(ethAmount, alcxAmount, normalizedWeights);
-
-        if (stakeBpt) depositIntoRewardsPool();
+        if (_stakeBpt) depositIntoRewardsPool();
         else bpt.safeTransferFrom(address(this), msg.sender, bpt.balanceOf(address(this)));
     }
 
-    receive() external payable {}
+    receive() external payable {
+        if (msg.value > 0) {
+            weth.deposit{ value: msg.value }();
+        }
+    }
 }
