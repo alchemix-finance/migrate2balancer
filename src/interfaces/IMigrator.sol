@@ -46,11 +46,16 @@ interface IMigrator {
     function setSwapSlippage(uint256 _amount) external;
 
     /**
+     * @notice Set max approvals for contract tokens
+     */
+    function setApprovals() external;
+
+    /**
      * @notice Calculate the min amount of TOKEN and WETH for a given SLP amount
      * @param _slpAmount The amount of SLP
      * @return Return values for min amount out of TOKEN and WETH with unwrap slippage
      */
-    function calculateSlpAmounts(uint256 _slpAmount) external view returns (uint256, uint256);
+    function calculateSlpAmounts(uint256 _slpAmount) external returns (uint256, uint256);
 
     /**
      * @notice Unrwap SLP into TOKEN and WETH
@@ -67,7 +72,7 @@ interface IMigrator {
      * @param _tokenAmount Amount of TOKEN to deposit
      * @return uint256 Amount of WETH required to create 80/20 balanced deposit
      */
-    function calculateWethWeight(uint256 _tokenAmount) external view returns (uint256);
+    function calculateWethWeight(uint256 _tokenAmount) external returns (uint256);
 
     /**
      * @notice Deposit into TOKEN/WETH 80/20 balancer pool

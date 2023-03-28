@@ -43,7 +43,8 @@ contract Migrator is IMigrator, Initializable, Ownable {
     IUniswapV2Router02 public sushiRouter;
     IVault public balancerVault;
     IBasePool public balancerPool;
-    IAsset[] public poolAssets = new IAsset[](2);
+    IAsset public poolAssetWeth;
+    IAsset public poolAssetToken;
 
     /*
         Admin functions
@@ -62,13 +63,10 @@ contract Migrator is IMigrator, Initializable, Ownable {
         balancerVault = IVault(params.balancerVault);
         balancerPool = IBasePool(address(bpt));
         balancerPoolId = balancerPool.getPoolId();
-        poolAssets[0] = IAsset(address(weth));
-        poolAssets[1] = IAsset(params.token);
+        poolAssetWeth = IAsset(address(weth));
+        poolAssetToken = IAsset(params.token);
 
-        weth.approve(address(balancerVault), type(uint256).max);
-        token.approve(address(balancerVault), type(uint256).max);
-        bpt.approve(address(auraPool), type(uint256).max);
-        slp.approve(address(sushiRouter), type(uint256).max);
+        setApprovals();
     }
 
     /// @inheritdoc IMigrator
@@ -88,6 +86,14 @@ contract Migrator is IMigrator, Initializable, Ownable {
     */
 
     /// @inheritdoc IMigrator
+    function setApprovals() public onlyOwner {
+        weth.approve(address(balancerVault), type(uint256).max);
+        token.approve(address(balancerVault), type(uint256).max);
+        bpt.approve(address(auraPool), type(uint256).max);
+        slp.approve(address(sushiRouter), type(uint256).max);
+    }
+
+    /// @inheritdoc IMigrator
     function calculateSlpAmounts(uint256 _slpAmount) public view returns (uint256, uint256) {
         uint256 slpSupply = slp.totalSupply();
         (uint256 wethReserves, uint256 tokenReserves, ) = slp.getReserves();
@@ -105,7 +111,7 @@ contract Migrator is IMigrator, Initializable, Ownable {
 
     /// @inheritdoc IMigrator
     function calculateWethWeight(uint256 _tokenAmount) public view returns (uint256) {
-        (, int256 tokenEthPrice, , , ) = priceFeed.latestRoundData();
+        int256 tokenEthPrice = _tokenPrice();
 
         uint256[] memory normalizedWeights = IManagedPool(address(balancerPool)).getNormalizedWeights();
 
@@ -117,7 +123,7 @@ contract Migrator is IMigrator, Initializable, Ownable {
 
     /// @inheritdoc IMigrator
     function unwrapSlp() public {
-        uint256 deadline = block.timestamp + 300;
+        uint256 deadline = block.timestamp;
         uint256 slpAmount = slp.balanceOf(address(this));
 
         (uint256 amountTokenMin, uint256 amountWethMin) = calculateSlpAmounts(slpAmount);
@@ -138,7 +144,7 @@ contract Migrator is IMigrator, Initializable, Ownable {
         uint256 wethBalance = weth.balanceOf(address(this));
         require(wethBalance > wethRequired, "contract doesn't have enough weth");
 
-        (, int256 tokenEthPrice, , , ) = priceFeed.latestRoundData();
+        int256 tokenEthPrice = _tokenPrice();
 
         uint256 amountWeth = wethBalance - wethRequired;
         uint256 minAmountOut = (((amountWeth * uint256(tokenEthPrice)) / (1 ether)) * (BPS - swapSlippage)) / BPS;
@@ -147,8 +153,8 @@ contract Migrator is IMigrator, Initializable, Ownable {
         IVault.SingleSwap memory singleSwap = IVault.SingleSwap({
             poolId: balancerPoolId,
             kind: IVault.SwapKind.GIVEN_IN,
-            assetIn: IAsset(address(weth)),
-            assetOut: IAsset(address(token)),
+            assetIn: poolAssetWeth,
+            assetOut: poolAssetToken,
             amount: amountWeth,
             userData: bytes("")
         });
@@ -174,6 +180,10 @@ contract Migrator is IMigrator, Initializable, Ownable {
         uint256[] memory amountsIn = new uint256[](2);
         amountsIn[0] = wethAmount;
         amountsIn[1] = tokenAmount;
+
+        IAsset[] memory poolAssets = new IAsset[](2);
+        poolAssets[0] = poolAssetWeth;
+        poolAssets[1] = poolAssetToken;
 
         uint256 bptAmountOut = WeightedMath._calcBptOutGivenExactTokensIn(
             balances,
@@ -240,5 +250,24 @@ contract Migrator is IMigrator, Initializable, Ownable {
         if (msg.value > 0) {
             weth.deposit{ value: msg.value }();
         }
+    }
+
+    /*
+        Internal functions
+    */
+
+    /**
+     * @notice Get the price of a token
+     * @dev Make sure price is not stale or incorrect
+     * @return Return the correct price
+     */
+    function _tokenPrice() internal view returns (int256) {
+        (uint80 roundId, int256 price, , uint256 timestamp, uint80 answeredInRound) = priceFeed.latestRoundData();
+
+        require(answeredInRound >= roundId, "Stale price");
+        require(timestamp != 0, "Round not complete");
+        require(price > 0, "Chainlink answer reporting 0");
+
+        return price;
     }
 }
