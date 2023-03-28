@@ -11,11 +11,9 @@ contract BaseTest is DSTestPlus {
     ProxyAdmin public proxyAdmin;
     TransparentUpgradeableProxy migratorProxy;
 
-    // Initialization variables
-    uint256 public alchemixPoolId = 2;
-    uint256 public sushiPoolId = 0;
+    // Initialization parameters
     IWETH9 public weth = IWETH9(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IERC20 public alcx = IERC20(0xdBdb4d16EdA451D0503b854CF79D55697F90c8DF);
+    IERC20 public token = IERC20(0xdBdb4d16EdA451D0503b854CF79D55697F90c8DF);
     IERC20 public bpt = IERC20(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
     IERC20 public auraBpt = IERC20(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
     IUniswapV2Pair public slp = IUniswapV2Pair(0xC3f279090a47e80990Fe3a9c30d24Cb117EF91a8);
@@ -32,14 +30,10 @@ contract BaseTest is DSTestPlus {
     uint256 public TOKEN_1M = 1e24;
     uint256 public BPS = 10000;
 
-    function setUp() public {
-        user = hevm.addr(userPrivateKey);
-
-        IMigrator.InitializationParams memory params = IMigrator.InitializationParams(
-            alchemixPoolId,
-            sushiPoolId,
+    IMigrator.InitializationParams public params =
+        IMigrator.InitializationParams(
             address(weth),
-            address(alcx),
+            address(token),
             address(bpt),
             address(auraBpt),
             address(slp),
@@ -48,6 +42,9 @@ contract BaseTest is DSTestPlus {
             address(sushiRouter),
             address(balancerVault)
         );
+
+    function setUp() public {
+        user = hevm.addr(userPrivateKey);
 
         migrator = new Migrator();
         proxyAdmin = new ProxyAdmin();

@@ -4,8 +4,14 @@ pragma solidity ^0.8.15;
 import "./BaseTest.sol";
 
 contract MigratorTest is BaseTest {
+    // Migrator cannot be initialized twice
+    function test_initialize() external {
+        hevm.expectRevert(abi.encodePacked("Initializable: contract is already initialized"));
+        migrator.initialize(params);
+    }
+
     // Only contract owner should be able to set unwrap and swap slippage
-    function test_setUnrwapSlippage(uint256 _amount) external {
+    function test_setSlippage(uint256 _amount) external {
         if (_amount > migrator.BPS()) {
             hevm.expectRevert(abi.encodePacked("unwrap slippage too high"));
             migrator.setUnrwapSlippage(_amount);
@@ -28,6 +34,18 @@ contract MigratorTest is BaseTest {
         migrator.setSwapSlippage(_amount);
     }
 
+    // Given an TOKEN amount, calculate the WETH amount for an 80/20 TOKEN/WETH ratio
+    function test_calculateWethWeight(uint256 _amount) external {
+        uint256 slpSupply = slp.totalSupply();
+        hevm.assume(_amount < slpSupply && _amount > 0);
+
+        (, int256 tokenEthPrice, , , ) = priceFeed.latestRoundData();
+        uint256 amountInEth = (((_amount * uint256(tokenEthPrice)) / 1 ether) * 2000) / 8000;
+        uint256 wethAmount = migrator.calculateWethWeight(_amount);
+
+        assertEq(wethAmount, amountInEth);
+    }
+
     // Test unwrapping SLP within the Migrator contract
     function test_unwrapSlp(uint256 _amount) external {
         // Set range for amount based on SLP supply
@@ -39,15 +57,15 @@ contract MigratorTest is BaseTest {
 
         // Migrator should only have SLP
         assertEq(slp.balanceOf(address(migrator)), _amount);
-        assertEq(alcx.balanceOf(address(migrator)), 0);
+        assertEq(token.balanceOf(address(migrator)), 0);
         assertEq(weth.balanceOf(address(migrator)), 0);
 
         // Calculate min amount out
         (uint256 amountTokenMin, uint256 amountWethMin) = migrator.calculateSlpAmounts(_amount);
 
         // Calculate expected amount without unwrap slippage
-        (uint256 wethReserves, uint256 alcxReserves, ) = slp.getReserves();
-        uint256 amountToken = (_amount * alcxReserves) / slpSupply;
+        (uint256 wethReserves, uint256 tokenReserves, ) = slp.getReserves();
+        uint256 amountToken = (_amount * tokenReserves) / slpSupply;
         uint256 amountWeth = (_amount * wethReserves) / slpSupply;
 
         // hevm.prank(address(migrator));
@@ -56,11 +74,11 @@ contract MigratorTest is BaseTest {
         // After unwrap, Migrator SLP balance should be 0
         assertEq(slp.balanceOf(address(migrator)), 0);
 
-        // Get ALCX and WETH balance of Migrator
-        uint256 tokenBalance = alcx.balanceOf(address(migrator));
+        // Get TOKEN and WETH balance of Migrator
+        uint256 tokenBalance = token.balanceOf(address(migrator));
         uint256 wethBalance = weth.balanceOf(address(migrator));
 
-        // Migrator should have >= min expected ALCX and WETH
+        // Migrator should have >= min expected TOKEN and WETH
         assertGe(tokenBalance, amountTokenMin);
         assertGe(wethBalance, amountWethMin);
 
@@ -69,8 +87,8 @@ contract MigratorTest is BaseTest {
         assertApproxEq(wethBalance, amountWeth, ((amountWeth * (BPS - migrator.unrwapSlippage())) / BPS));
     }
 
-    // Test swapping WETH for ALCX to go from 50/50 to 80/20 ALCX/WETH ratio
-    function test_swapWethForAlcxBalancer(uint256 _amount) external {
+    // Test swapping WETH for TOKEN to go from 50/50 to 80/20 TOKEN/WETH ratio
+    function test_swapWethForTokenBalancer(uint256 _amount) external {
         // Set range to be less than 10% of SLP supply
         uint256 slpSupply = slp.totalSupply();
         hevm.assume(_amount <= ((slpSupply * 1000) / migrator.BPS()) && _amount > 1 ether);
@@ -80,41 +98,29 @@ contract MigratorTest is BaseTest {
         hevm.prank(address(migrator));
         migrator.unwrapSlp();
 
-        (, int256 alcxEthPrice, , , ) = priceFeed.latestRoundData();
+        (, int256 tokenEthPrice, , , ) = priceFeed.latestRoundData();
 
-        uint256 alcxBalanceBefore = alcx.balanceOf(address(migrator));
+        uint256 tokenBalanceBefore = token.balanceOf(address(migrator));
         uint256 wethBalanceBefore = weth.balanceOf(address(migrator));
 
-        uint256 alcxInEthBefore = (alcxBalanceBefore * uint256(alcxEthPrice)) / 1 ether;
-        uint256 totalValueBefore = alcxInEthBefore + wethBalanceBefore;
+        uint256 tokenInEthBefore = (tokenBalanceBefore * uint256(tokenEthPrice)) / 1 ether;
+        uint256 totalValueBefore = tokenInEthBefore + wethBalanceBefore;
 
-        // ALCX/WETH ratio should be approx 50/50
-        assertApproxEqRel(alcxInEthBefore, (totalValueBefore * 5000) / BPS, 0.1e18);
+        // TOKEN/WETH ratio should be approx 50/50
+        assertApproxEqRel(tokenInEthBefore, (totalValueBefore * 5000) / BPS, 0.1e18);
         assertApproxEqRel(wethBalanceBefore, (totalValueBefore * 5000) / BPS, 0.1e18);
 
-        migrator.swapWethForAlcxBalancer();
+        migrator.swapWethForTokenBalancer();
 
-        uint256 alcxBalanceAfter = alcx.balanceOf(address(migrator));
+        uint256 tokenBalanceAfter = token.balanceOf(address(migrator));
         uint256 wethBalanceAfter = weth.balanceOf(address(migrator));
 
-        uint256 alcxInEthAfter = (alcxBalanceAfter * uint256(alcxEthPrice)) / 1 ether;
-        uint256 totalValueAfter = alcxInEthAfter + wethBalanceAfter;
+        uint256 tokenInEthAfter = (tokenBalanceAfter * uint256(tokenEthPrice)) / 1 ether;
+        uint256 totalValueAfter = tokenInEthAfter + wethBalanceAfter;
 
-        // ALCX/WETH ratio should be approx 80/20
-        assertApproxEqRel(alcxInEthAfter, (totalValueAfter * 8000) / BPS, 0.4e18);
+        // TOKEN/WETH ratio should be approx 80/20
+        assertApproxEqRel(tokenInEthAfter, (totalValueAfter * 8000) / BPS, 0.4e18);
         assertApproxEqRel(wethBalanceAfter, (totalValueAfter * 2000) / BPS, 0.4e18);
-    }
-
-    // Given an ALCX amount, calculate the WETH amount for an 80/20 ALCX/WETH ratio
-    function test_calculateWethWeight(uint256 _amount) external {
-        uint256 slpSupply = slp.totalSupply();
-        hevm.assume(_amount < slpSupply && _amount > 0);
-
-        (, int256 alcxEthPrice, , , ) = priceFeed.latestRoundData();
-        uint256 amountInEth = (((_amount * uint256(alcxEthPrice)) / 1 ether) * 2000) / 8000;
-        uint256 wethAmount = migrator.calculateWethWeight(_amount);
-
-        assertEq(wethAmount, amountInEth);
     }
 
     // Test depositing into the Balancer pool and receiving BPT
@@ -123,11 +129,11 @@ contract MigratorTest is BaseTest {
         uint256 slpSupply = slp.totalSupply();
         hevm.assume(_amount <= ((slpSupply * 1000) / migrator.BPS()) && _amount > 1 ether);
 
-        // Seed Migrator with SLP, unwrap, and swap for 80/20 ALCX/WETH
+        // Seed Migrator with SLP, unwrap, and swap for 80/20 TOKEN/WETH
         deal(address(slp), address(migrator), _amount);
         hevm.prank(address(migrator));
         migrator.unwrapSlp();
-        migrator.swapWethForAlcxBalancer();
+        migrator.swapWethForTokenBalancer();
 
         // BPT balance should be 0
         uint256 bptBalanceBefore = bpt.balanceOf(address(migrator));
@@ -137,11 +143,11 @@ contract MigratorTest is BaseTest {
         migrator.depositIntoBalancerPool();
 
         uint256 bptBalanceAfter = bpt.balanceOf(address(migrator));
-        uint256 alcxBalanceAfter = alcx.balanceOf(address(migrator));
+        uint256 tokenBalanceAfter = token.balanceOf(address(migrator));
         uint256 wethBalanceAfter = weth.balanceOf(address(migrator));
 
         assertGt(bptBalanceAfter, bptBalanceBefore);
-        assertEq(alcxBalanceAfter, 0);
+        assertEq(tokenBalanceAfter, 0);
         assertEq(wethBalanceAfter, 0);
     }
 
@@ -215,7 +221,7 @@ contract MigratorTest is BaseTest {
 
         // Migrator should have no funds
         assertEq(weth.balanceOf(address(migrator)), 0);
-        assertEq(alcx.balanceOf(address(migrator)), 0);
+        assertEq(token.balanceOf(address(migrator)), 0);
         assertEq(bpt.balanceOf(address(migrator)), 0);
         assertEq(auraBpt.balanceOf(address(migrator)), 0);
         assertEq(slp.balanceOf(address(migrator)), 0);
@@ -248,7 +254,7 @@ contract MigratorTest is BaseTest {
 
         // Migrator should have no funds
         assertEq(weth.balanceOf(address(migrator)), 0);
-        assertEq(alcx.balanceOf(address(migrator)), 0);
+        assertEq(token.balanceOf(address(migrator)), 0);
         assertEq(bpt.balanceOf(address(migrator)), 0);
         assertEq(auraBpt.balanceOf(address(migrator)), 0);
         assertEq(slp.balanceOf(address(migrator)), 0);

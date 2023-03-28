@@ -2,11 +2,12 @@
 pragma solidity ^0.8.15;
 
 interface IMigrator {
+    /**
+     * @notice Parameters to initialize Migrator
+     */
     struct InitializationParams {
-        uint256 alchemixPoolId;
-        uint256 sushiPoolId;
         address weth;
-        address alcx;
+        address token;
         address bpt;
         address auraBpt;
         address slp;
@@ -15,6 +16,14 @@ interface IMigrator {
         address sushiRouter;
         address balancerVault;
     }
+
+    /**
+     * @notice Emitted when an account migrates from SLP to BPT or auraBPT
+     * @param account The account migrating
+     * @param amountSlp The amount of SLP migrated
+     * @param staked Indicates if the account received auraBPT
+     */
+    event Migrated(address indexed account, uint256 amountSlp, bool staked);
 
     /**
      * @notice Initialize the contract
@@ -30,38 +39,38 @@ interface IMigrator {
     function setUnrwapSlippage(uint256 _amount) external;
 
     /**
-     * @notice Update the slippage for swapping WETH for ALCX
+     * @notice Update the slippage for swapping WETH for TOKEN
      * @param _amount The updated slippage amount in bps
      * @dev This function is only callable by the contract owner.
      */
     function setSwapSlippage(uint256 _amount) external;
 
     /**
-     * @notice Calculate the min amount of ALCX and WETH for a given SLP amount
+     * @notice Calculate the min amount of TOKEN and WETH for a given SLP amount
      * @param _slpAmount The amount of SLP
-     * @return Return values for min amount out of ALCX and WETH with unwrap slippage
+     * @return Return values for min amount out of TOKEN and WETH with unwrap slippage
      */
     function calculateSlpAmounts(uint256 _slpAmount) external view returns (uint256, uint256);
 
     /**
-     * @notice Unrwap SLP into ALCX and WETH
+     * @notice Unrwap SLP into TOKEN and WETH
      */
     function unwrapSlp() external;
 
     /**
-     * @notice Swap WETH for ALCX to have balanced 80/20 ALCX/WETH
+     * @notice Swap WETH for TOKEN to have balanced 80/20 TOKEN/WETH
      */
-    function swapWethForAlcxBalancer() external;
+    function swapWethForTokenBalancer() external;
 
     /**
      * @notice Get the amount WETH required to create balanced pool deposit
-     * @param _alcxAmount Amount of ALCX to deposit
+     * @param _tokenAmount Amount of TOKEN to deposit
      * @return uint256 Amount of WETH required to create 80/20 balanced deposit
      */
-    function calculateWethWeight(uint256 _alcxAmount) external view returns (uint256);
+    function calculateWethWeight(uint256 _tokenAmount) external view returns (uint256);
 
     /**
-     * @notice Deposit into ALCX/WETH 80/20 balancer pool
+     * @notice Deposit into TOKEN/WETH 80/20 balancer pool
      */
     function depositIntoBalancerPool() external;
 
