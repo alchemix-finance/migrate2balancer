@@ -71,6 +71,12 @@ interface IMigrator {
     function depositIntoRewardsPool() external;
 
     /**
+     * @notice Deposits msg.senders BPT balance into a rewards pool
+     * @dev Way for users to deposit into Aura pool if they already have BPT
+     */
+    function userDepositIntoRewardsPool() external;
+
+    /**
      * @notice Migrate SLP position into BPT position
      * @param stakeBpt indicate if staking BPT in Aura
      */

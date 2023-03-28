@@ -117,7 +117,7 @@ contract Migrator is IMigrator, Initializable, Ownable {
     /// @inheritdoc IMigrator
     function unwrapSlp() public {
         uint256 deadline = block.timestamp + 300;
-        uint256 slpAmount = slp.balanceOf(msg.sender);
+        uint256 slpAmount = slp.balanceOf(address(this));
 
         (uint256 amountTokenMin, uint256 amountWethMin) = calculateSlpAmounts(slpAmount);
 
@@ -214,7 +214,14 @@ contract Migrator is IMigrator, Initializable, Ownable {
     function depositIntoRewardsPool() public {
         uint256 amount = bpt.balanceOf(address(this));
 
-        auraPool.deposit(amount, address(this));
+        auraPool.deposit(amount, msg.sender);
+    }
+
+    /// @inheritdoc IMigrator
+    function userDepositIntoRewardsPool() public {
+        uint256 amount = bpt.balanceOf(msg.sender);
+        bpt.safeTransferFrom(msg.sender, address(this), amount);
+        auraPool.deposit(amount, msg.sender);
     }
 
     /*
@@ -231,6 +238,7 @@ contract Migrator is IMigrator, Initializable, Ownable {
 
         depositIntoBalancerPool();
 
+        // msg.sender receives auraBPT or BPT depending on their choice to deposit into Aura pool
         if (_stakeBpt) depositIntoRewardsPool();
         else bpt.safeTransferFrom(address(this), msg.sender, bpt.balanceOf(address(this)));
     }

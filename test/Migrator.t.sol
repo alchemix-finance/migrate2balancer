@@ -50,7 +50,7 @@ contract MigratorTest is BaseTest {
         uint256 amountToken = (_amount * alcxReserves) / slpSupply;
         uint256 amountWeth = (_amount * wethReserves) / slpSupply;
 
-        hevm.prank(address(migrator));
+        // hevm.prank(address(migrator));
         migrator.unwrapSlp();
 
         // After unwrap, Migrator SLP balance should be 0
@@ -70,7 +70,7 @@ contract MigratorTest is BaseTest {
     }
 
     // Test swapping WETH for ALCX to go from 50/50 to 80/20 ALCX/WETH ratio
-    function test_swapWethForAlcxBalancer(uint256 _amount) public {
+    function test_swapWethForAlcxBalancer(uint256 _amount) external {
         // Set range to be less than 10% of SLP supply
         uint256 slpSupply = slp.totalSupply();
         hevm.assume(_amount <= ((slpSupply * 1000) / migrator.BPS()) && _amount > 1 ether);
@@ -106,7 +106,7 @@ contract MigratorTest is BaseTest {
     }
 
     // Given an ALCX amount, calculate the WETH amount for an 80/20 ALCX/WETH ratio
-    function test_calculateWethWeight(uint256 _amount) public {
+    function test_calculateWethWeight(uint256 _amount) external {
         uint256 slpSupply = slp.totalSupply();
         hevm.assume(_amount < slpSupply && _amount > 0);
 
@@ -118,7 +118,7 @@ contract MigratorTest is BaseTest {
     }
 
     // Test depositing into the Balancer pool and receiving BPT
-    function test_depositIntoBalancerPool(uint256 _amount) public {
+    function test_depositIntoBalancerPool(uint256 _amount) external {
         // Set range to be less than 10% of SLP supply
         uint256 slpSupply = slp.totalSupply();
         hevm.assume(_amount <= ((slpSupply * 1000) / migrator.BPS()) && _amount > 1 ether);
@@ -143,5 +143,115 @@ contract MigratorTest is BaseTest {
         assertGt(bptBalanceAfter, bptBalanceBefore);
         assertEq(alcxBalanceAfter, 0);
         assertEq(wethBalanceAfter, 0);
+    }
+
+    // Test depositing BPT into the Aura pool and receiving auraBPT
+    function test_depositIntoRewardsPool(uint256 _amount) external {
+        uint256 bptSupply = bpt.totalSupply();
+        hevm.assume(_amount <= bptSupply / 2 && _amount > 0);
+
+        // Seed migrator with BPT
+        deal(address(bpt), address(migrator), _amount);
+
+        // Migrator should only have BPT
+        assertEq(bpt.balanceOf(address(migrator)), _amount);
+        assertEq(auraBpt.balanceOf(address(migrator)), 0);
+
+        hevm.prank(address(migrator));
+        migrator.depositIntoRewardsPool();
+
+        // Migrator should only have auraBPT
+        assertEq(bpt.balanceOf(address(migrator)), 0);
+        assertEq(auraBpt.balanceOf(address(migrator)), _amount);
+    }
+
+    // Test external users depositing BPT into the Aura pool and receiving auraBPT
+    function test_userDepositIntoRewardsPool(uint256 _amount) external {
+        uint256 bptSupply = bpt.totalSupply();
+        hevm.assume(_amount <= bptSupply / 2 && _amount > 0);
+
+        // Seed user with BPT
+        deal(address(bpt), user, _amount);
+
+        // User should only have BPT
+        assertEq(bpt.balanceOf(user), _amount);
+        assertEq(auraBpt.balanceOf(user), 0);
+
+        hevm.startPrank(user);
+
+        bpt.approve(address(migrator), _amount);
+        migrator.userDepositIntoRewardsPool();
+
+        hevm.stopPrank();
+
+        // User should only have auraBPT
+        assertEq(bpt.balanceOf(user), 0);
+        assertEq(auraBpt.balanceOf(user), _amount);
+    }
+
+    // Test entire flow of migrating from SLP to auraBPT
+    function test_migrateToAuraBpt(uint256 _amount) external {
+        // Set range to be less than 10% of SLP supply
+        uint256 slpSupply = slp.totalSupply();
+        hevm.assume(_amount <= ((slpSupply * 1000) / migrator.BPS()) && _amount > 1 ether);
+
+        // Seed user with SLP
+        deal(address(slp), user, _amount);
+
+        // User should only have SLP
+        assertEq(slp.balanceOf(user), _amount);
+        assertEq(bpt.balanceOf(user), 0);
+        assertEq(auraBpt.balanceOf(user), 0);
+
+        hevm.startPrank(user);
+        slp.approve(address(migrator), _amount);
+        migrator.migrate(true);
+        hevm.stopPrank();
+
+        // User should only have auraBPT (auraBPT amount > original SLP amount)
+        assertEq(slp.balanceOf(user), 0);
+        assertEq(bpt.balanceOf(user), 0);
+        assertGt(auraBpt.balanceOf(user), _amount);
+
+        // Migrator should have no funds
+        assertEq(weth.balanceOf(address(migrator)), 0);
+        assertEq(alcx.balanceOf(address(migrator)), 0);
+        assertEq(bpt.balanceOf(address(migrator)), 0);
+        assertEq(auraBpt.balanceOf(address(migrator)), 0);
+        assertEq(slp.balanceOf(address(migrator)), 0);
+        assertEq((address(migrator).balance), 0);
+    }
+
+    // Test entire flow of migrating from SLP to BPT
+    function test_migrateToBpt(uint256 _amount) external {
+        // Set range to be less than 10% of SLP supply
+        uint256 slpSupply = slp.totalSupply();
+        hevm.assume(_amount <= ((slpSupply * 1000) / migrator.BPS()) && _amount > 1 ether);
+
+        // Seed user with SLP
+        deal(address(slp), user, _amount);
+
+        // User should only have SLP
+        assertEq(slp.balanceOf(user), _amount);
+        assertEq(bpt.balanceOf(user), 0);
+        assertEq(auraBpt.balanceOf(user), 0);
+
+        hevm.startPrank(user);
+        slp.approve(address(migrator), _amount);
+        migrator.migrate(false);
+        hevm.stopPrank();
+
+        // User should only have BPT (BPT amount > original SLP amount)
+        assertEq(slp.balanceOf(user), 0);
+        assertGt(bpt.balanceOf(user), _amount);
+        assertEq(auraBpt.balanceOf(user), 0);
+
+        // Migrator should have no funds
+        assertEq(weth.balanceOf(address(migrator)), 0);
+        assertEq(alcx.balanceOf(address(migrator)), 0);
+        assertEq(bpt.balanceOf(address(migrator)), 0);
+        assertEq(auraBpt.balanceOf(address(migrator)), 0);
+        assertEq(slp.balanceOf(address(migrator)), 0);
+        assertEq((address(migrator).balance), 0);
     }
 }
