@@ -29,8 +29,8 @@ FORK_URL=--fork-url https://eth-mainnet.alchemyapi.io/v2/$(ALCHEMY_API_KEY)
 # generates and serves documentation locally on port 4000
 docs_local :; forge doc --serve --port 4000
 
-# generates and builds documentation to ./documentation
-docs_build :; forge doc --build --out ./documentation
+# generates and builds documentation to ./docs
+docs_build :; forge doc --build --out ./docs
 
 # runs all tests: "make test_all"
 test_all :; FOUNDRY_PROFILE=$(PROFILE) forge test $(FORK_URL)
