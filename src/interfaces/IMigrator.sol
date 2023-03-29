@@ -52,48 +52,14 @@ interface IMigrator {
     function setApprovals() external;
 
     /**
-     * @notice Calculate the min amount of TOKEN and WETH for a given SLP amount
-     * @param _slpAmount The amount of SLP
-     * @return Return values for min amount out of TOKEN and WETH with unwrap slippage
+     * @notice Migrate SLP position into BPT position
+     * @param stakeBpt indicate if staking BPT in Aura
      */
-    function calculateSlpAmounts(uint256 _slpAmount) external returns (uint256, uint256);
-
-    /**
-     * @notice Unrwap SLP into TOKEN and WETH
-     */
-    function unwrapSlp() external;
-
-    /**
-     * @notice Swap WETH for TOKEN to have balanced 80/20 TOKEN/WETH
-     */
-    function swapWethForTokenBalancer() external;
-
-    /**
-     * @notice Get the amount WETH required to create balanced pool deposit
-     * @param _tokenAmount Amount of TOKEN to deposit
-     * @return uint256 Amount of WETH required to create 80/20 balanced deposit
-     */
-    function calculateWethWeight(uint256 _tokenAmount) external returns (uint256);
-
-    /**
-     * @notice Deposit into TOKEN/WETH 80/20 balancer pool
-     */
-    function depositIntoBalancerPool() external;
-
-    /**
-     * @notice Deposit BPT into rewards pool
-     */
-    function depositIntoRewardsPool() external;
+    function migrate(bool stakeBpt) external;
 
     /**
      * @notice Deposits msg.senders BPT balance into a rewards pool
      * @dev Way for users to deposit into Aura pool if they already have BPT
      */
     function userDepositIntoRewardsPool() external;
-
-    /**
-     * @notice Migrate SLP position into BPT position
-     * @param stakeBpt indicate if staking BPT in Aura
-     */
-    function migrate(bool stakeBpt) external;
 }

@@ -3,13 +3,16 @@ pragma solidity ^0.8.15;
 
 import "lib/forge-std/src/console2.sol";
 import "./utils/DSTestPlus.sol";
+import "./utils/MigratorHarness.sol";
 import "src/Migrator.sol";
 import "src/interfaces/IMigrator.sol";
 
 contract BaseTest is DSTestPlus {
     Migrator public migrator;
+    MigratorHarness public migratorHarness;
     ProxyAdmin public proxyAdmin;
     TransparentUpgradeableProxy migratorProxy;
+    TransparentUpgradeableProxy migratorHarnessProxy;
 
     // Initialization parameters
     IWETH9 public weth = IWETH9(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
@@ -52,5 +55,10 @@ contract BaseTest is DSTestPlus {
         proxyAdmin = new ProxyAdmin();
         migratorProxy = new TransparentUpgradeableProxy(address(migrator), address(proxyAdmin), "");
         migrator.initialize(params);
+
+        migratorHarness = new MigratorHarness();
+        proxyAdmin = new ProxyAdmin();
+        migratorHarnessProxy = new TransparentUpgradeableProxy(address(migratorHarness), address(proxyAdmin), "");
+        migratorHarness.initialize(params);
     }
 }

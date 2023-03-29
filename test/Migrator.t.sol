@@ -12,7 +12,7 @@ contract MigratorTest is BaseTest {
 
     // Only contract owner should be able to set unwrap and swap slippage
     function test_setSlippage(uint256 _amount) external {
-        if (_amount > migrator.BPS()) {
+        if (_amount > BPS) {
             hevm.expectRevert(abi.encodePacked("unwrap slippage too high"));
             migrator.setUnrwapSlippage(_amount);
 
@@ -41,67 +41,66 @@ contract MigratorTest is BaseTest {
 
         (, int256 tokenEthPrice, , , ) = tokenPrice.latestRoundData();
         uint256 amountInEth = (((_amount * uint256(tokenEthPrice)) / 1 ether) * 2000) / 8000;
-        uint256 wethAmount = migrator.calculateWethWeight(_amount);
+        uint256 wethAmount = migratorHarness.exposed_calculateWethWeight(_amount);
 
         assertEq(wethAmount, amountInEth);
     }
 
-    // Test unwrapping SLP within the Migrator contract
+    // Test unwrapping SLP
     function test_unwrapSlp(uint256 _amount) external {
         // Set range for amount based on SLP supply
         uint256 slpSupply = slp.totalSupply();
         hevm.assume(_amount < slpSupply && _amount > 1 ether);
 
-        // Seed Migrator with SLP
-        deal(address(slp), address(migrator), _amount);
+        // Seed with SLP
+        deal(address(slp), address(migratorHarness), _amount);
 
-        // Migrator should only have SLP
-        assertEq(slp.balanceOf(address(migrator)), _amount);
-        assertEq(token.balanceOf(address(migrator)), 0);
-        assertEq(weth.balanceOf(address(migrator)), 0);
+        // Should only have SLP
+        assertEq(slp.balanceOf(address(migratorHarness)), _amount);
+        assertEq(token.balanceOf(address(migratorHarness)), 0);
+        assertEq(weth.balanceOf(address(migratorHarness)), 0);
 
         // Calculate min amount out
-        (uint256 amountTokenMin, uint256 amountWethMin) = migrator.calculateSlpAmounts(_amount);
+        (uint256 amountTokenMin, uint256 amountWethMin) = migratorHarness.exposed_calculateSlpAmounts(_amount);
 
         // Calculate expected amount without unwrap slippage
         (uint256 wethReserves, uint256 tokenReserves, ) = slp.getReserves();
         uint256 amountToken = (_amount * tokenReserves) / slpSupply;
         uint256 amountWeth = (_amount * wethReserves) / slpSupply;
 
-        // hevm.prank(address(migrator));
-        migrator.unwrapSlp();
+        migratorHarness.exposed_unwrapSlp();
 
-        // After unwrap, Migrator SLP balance should be 0
-        assertEq(slp.balanceOf(address(migrator)), 0);
+        // After unwrap, SLP balance should be 0
+        assertEq(slp.balanceOf(address(migratorHarness)), 0);
 
-        // Get TOKEN and WETH balance of Migrator
-        uint256 tokenBalance = token.balanceOf(address(migrator));
-        uint256 wethBalance = weth.balanceOf(address(migrator));
+        // Get TOKEN and WETH balance
+        uint256 tokenBalance = token.balanceOf(address(migratorHarness));
+        uint256 wethBalance = weth.balanceOf(address(migratorHarness));
 
-        // Migrator should have >= min expected TOKEN and WETH
+        // Should have >= min expected TOKEN and WETH
         assertGe(tokenBalance, amountTokenMin);
         assertGe(wethBalance, amountWethMin);
 
-        // Migrator balances should be within a delta of actual amount and unwrap slippage
-        assertApproxEq(tokenBalance, amountToken, ((amountToken * (BPS - migrator.unrwapSlippage())) / BPS));
-        assertApproxEq(wethBalance, amountWeth, ((amountWeth * (BPS - migrator.unrwapSlippage())) / BPS));
+        // Balances should be within a delta of actual amount and unwrap slippage
+        assertApproxEq(tokenBalance, amountToken, ((amountToken * (BPS - migratorHarness.unrwapSlippage())) / BPS));
+        assertApproxEq(wethBalance, amountWeth, ((amountWeth * (BPS - migratorHarness.unrwapSlippage())) / BPS));
     }
 
     // Test swapping WETH for TOKEN to go from 50/50 to 80/20 TOKEN/WETH ratio
     function test_swapWethForTokenBalancer(uint256 _amount) external {
         // Set range to be less than 10% of SLP supply
         uint256 slpSupply = slp.totalSupply();
-        hevm.assume(_amount <= ((slpSupply * 1000) / migrator.BPS()) && _amount > 1 ether);
+        hevm.assume(_amount <= ((slpSupply * 1000) / BPS) && _amount > 1 ether);
 
-        // Seed Migrator with SLP
-        deal(address(slp), address(migrator), _amount);
-        hevm.prank(address(migrator));
-        migrator.unwrapSlp();
+        // Seed with SLP
+        deal(address(slp), address(migratorHarness), _amount);
+        hevm.prank(address(migratorHarness));
+        migratorHarness.exposed_unwrapSlp();
 
         (, int256 tokenEthPrice, , , ) = tokenPrice.latestRoundData();
 
-        uint256 tokenBalanceBefore = token.balanceOf(address(migrator));
-        uint256 wethBalanceBefore = weth.balanceOf(address(migrator));
+        uint256 tokenBalanceBefore = token.balanceOf(address(migratorHarness));
+        uint256 wethBalanceBefore = weth.balanceOf(address(migratorHarness));
 
         uint256 tokenInEthBefore = (tokenBalanceBefore * uint256(tokenEthPrice)) / 1 ether;
         uint256 totalValueBefore = tokenInEthBefore + wethBalanceBefore;
@@ -110,10 +109,10 @@ contract MigratorTest is BaseTest {
         assertApproxEqRel(tokenInEthBefore, (totalValueBefore * 5000) / BPS, 0.1e18);
         assertApproxEqRel(wethBalanceBefore, (totalValueBefore * 5000) / BPS, 0.1e18);
 
-        migrator.swapWethForTokenBalancer();
+        migratorHarness.exposed_swapWethForTokenBalancer();
 
-        uint256 tokenBalanceAfter = token.balanceOf(address(migrator));
-        uint256 wethBalanceAfter = weth.balanceOf(address(migrator));
+        uint256 tokenBalanceAfter = token.balanceOf(address(migratorHarness));
+        uint256 wethBalanceAfter = weth.balanceOf(address(migratorHarness));
 
         uint256 tokenInEthAfter = (tokenBalanceAfter * uint256(tokenEthPrice)) / 1 ether;
         uint256 totalValueAfter = tokenInEthAfter + wethBalanceAfter;
@@ -127,24 +126,24 @@ contract MigratorTest is BaseTest {
     function test_depositIntoBalancerPool(uint256 _amount) external {
         // Set range to be less than 10% of SLP supply
         uint256 slpSupply = slp.totalSupply();
-        hevm.assume(_amount <= ((slpSupply * 1000) / migrator.BPS()) && _amount > 1 ether);
+        hevm.assume(_amount <= ((slpSupply * 1000) / BPS) && _amount > 1 ether);
 
-        // Seed Migrator with SLP, unwrap, and swap for 80/20 TOKEN/WETH
-        deal(address(slp), address(migrator), _amount);
-        hevm.prank(address(migrator));
-        migrator.unwrapSlp();
-        migrator.swapWethForTokenBalancer();
+        // Seed with SLP, unwrap, and swap for 80/20 TOKEN/WETH
+        deal(address(slp), address(migratorHarness), _amount);
+        hevm.prank(address(migratorHarness));
+        migratorHarness.exposed_unwrapSlp();
+        migratorHarness.exposed_swapWethForTokenBalancer();
 
         // BPT balance should be 0
-        uint256 bptBalanceBefore = bpt.balanceOf(address(migrator));
+        uint256 bptBalanceBefore = bpt.balanceOf(address(migratorHarness));
         assertEq(bptBalanceBefore, 0);
 
         hevm.prank(user);
-        migrator.depositIntoBalancerPool();
+        migratorHarness.exposed_depositIntoBalancerPool();
 
-        uint256 bptBalanceAfter = bpt.balanceOf(address(migrator));
-        uint256 tokenBalanceAfter = token.balanceOf(address(migrator));
-        uint256 wethBalanceAfter = weth.balanceOf(address(migrator));
+        uint256 bptBalanceAfter = bpt.balanceOf(address(migratorHarness));
+        uint256 tokenBalanceAfter = token.balanceOf(address(migratorHarness));
+        uint256 wethBalanceAfter = weth.balanceOf(address(migratorHarness));
 
         assertGt(bptBalanceAfter, bptBalanceBefore);
         assertEq(tokenBalanceAfter, 0);
@@ -156,19 +155,19 @@ contract MigratorTest is BaseTest {
         uint256 bptSupply = bpt.totalSupply();
         hevm.assume(_amount <= bptSupply / 2 && _amount > 0);
 
-        // Seed migrator with BPT
-        deal(address(bpt), address(migrator), _amount);
+        // Seed with BPT
+        deal(address(bpt), address(migratorHarness), _amount);
 
-        // Migrator should only have BPT
-        assertEq(bpt.balanceOf(address(migrator)), _amount);
-        assertEq(auraBpt.balanceOf(address(migrator)), 0);
+        // Should only have BPT
+        assertEq(bpt.balanceOf(address(migratorHarness)), _amount);
+        assertEq(auraBpt.balanceOf(address(migratorHarness)), 0);
 
-        hevm.prank(address(migrator));
-        migrator.depositIntoRewardsPool();
+        hevm.prank(address(migratorHarness));
+        migratorHarness.exposed_depositIntoRewardsPool();
 
-        // Migrator should only have auraBPT
-        assertEq(bpt.balanceOf(address(migrator)), 0);
-        assertEq(auraBpt.balanceOf(address(migrator)), _amount);
+        // Should only have auraBPT
+        assertEq(bpt.balanceOf(address(migratorHarness)), 0);
+        assertEq(auraBpt.balanceOf(address(migratorHarness)), _amount);
     }
 
     // Test external users depositing BPT into the Aura pool and receiving auraBPT
@@ -199,7 +198,7 @@ contract MigratorTest is BaseTest {
     function test_migrateToAuraBpt(uint256 _amount) external {
         // Set range to be less than 10% of SLP supply
         uint256 slpSupply = slp.totalSupply();
-        hevm.assume(_amount <= ((slpSupply * 1000) / migrator.BPS()) && _amount > 1 ether);
+        hevm.assume(_amount <= ((slpSupply * 1000) / BPS) && _amount > 1 ether);
 
         // Seed user with SLP
         deal(address(slp), user, _amount);
@@ -232,7 +231,7 @@ contract MigratorTest is BaseTest {
     function test_migrateToBpt(uint256 _amount) external {
         // Set range to be less than 10% of SLP supply
         uint256 slpSupply = slp.totalSupply();
-        hevm.assume(_amount <= ((slpSupply * 1000) / migrator.BPS()) && _amount > 1 ether);
+        hevm.assume(_amount <= ((slpSupply * 1000) / BPS) && _amount > 1 ether);
 
         // Seed user with SLP
         deal(address(slp), user, _amount);
