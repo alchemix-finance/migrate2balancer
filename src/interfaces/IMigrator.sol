@@ -12,7 +12,8 @@ interface IMigrator {
         address auraBpt;
         address slp;
         address auraPool;
-        address priceFeed;
+        address tokenPrice;
+        address wethPrice;
         address sushiRouter;
         address balancerVault;
     }

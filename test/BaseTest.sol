@@ -18,7 +18,8 @@ contract BaseTest is DSTestPlus {
     IERC20 public auraBpt = IERC20(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
     IUniswapV2Pair public slp = IUniswapV2Pair(0xC3f279090a47e80990Fe3a9c30d24Cb117EF91a8);
     IRewardPool4626 public auraPool = IRewardPool4626(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
-    AggregatorV3Interface public priceFeed = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
+    AggregatorV3Interface public tokenPrice = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
+    AggregatorV3Interface public wethPrice = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
     IUniswapV2Router02 public sushiRouter = IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
     IVault public balancerVault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
 
@@ -38,7 +39,8 @@ contract BaseTest is DSTestPlus {
             address(auraBpt),
             address(slp),
             address(auraPool),
-            address(priceFeed),
+            address(tokenPrice),
+            address(wethPrice),
             address(sushiRouter),
             address(balancerVault)
         );

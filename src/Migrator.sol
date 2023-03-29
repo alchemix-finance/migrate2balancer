@@ -20,6 +20,8 @@ import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import "openzeppelin-contracts/contracts/proxy/transparent/ProxyAdmin.sol";
 import "openzeppelin-contracts/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
+import "lib/forge-std/src/console2.sol";
+
 /**
  * @title  Sushi to Balancer migrator
  * @notice Tool to facilitate migrating a sushi SLP position to a BPT or auraBPT position
@@ -39,7 +41,8 @@ contract Migrator is IMigrator, Initializable, Ownable {
     ERC20 public auraBpt;
     IUniswapV2Pair public slp;
     IRewardPool4626 public auraPool;
-    AggregatorV3Interface public priceFeed;
+    AggregatorV3Interface public tokenPrice;
+    AggregatorV3Interface public wethPrice;
     IUniswapV2Router02 public sushiRouter;
     IVault public balancerVault;
     IBasePool public balancerPool;
@@ -58,7 +61,8 @@ contract Migrator is IMigrator, Initializable, Ownable {
         auraBpt = ERC20(params.auraBpt);
         slp = IUniswapV2Pair(params.slp);
         auraPool = IRewardPool4626(params.auraPool);
-        priceFeed = AggregatorV3Interface(params.priceFeed);
+        tokenPrice = AggregatorV3Interface(params.tokenPrice);
+        wethPrice = AggregatorV3Interface(params.wethPrice);
         sushiRouter = IUniswapV2Router02(params.sushiRouter);
         balancerVault = IVault(params.balancerVault);
         balancerPool = IBasePool(address(bpt));
@@ -95,28 +99,31 @@ contract Migrator is IMigrator, Initializable, Ownable {
 
     /// @inheritdoc IMigrator
     function calculateSlpAmounts(uint256 _slpAmount) public view returns (uint256, uint256) {
+        uint256 tokenPriceEth = _tokenPrice();
+        uint256 wethPriceUsd = _wethPrice();
         uint256 slpSupply = slp.totalSupply();
         (uint256 wethReserves, uint256 tokenReserves, ) = slp.getReserves();
 
-        // Calculate the amount of tokens and WETH the user will receive
-        uint256 amountToken = (_slpAmount * tokenReserves) / slpSupply;
-        uint256 amountWeth = (_slpAmount * wethReserves) / slpSupply;
+        // Convert reserves into current USD price
+        uint256 tokenReservesUsd = ((tokenReserves * tokenPriceEth) * wethPriceUsd) / 1 ether;
+        uint256 wethReservesUsd = wethReserves * wethPriceUsd;
 
-        // Calculate the minimum amounts with unrwapSlippage tolerance
-        uint256 amountTokenMin = (amountToken * (BPS - unrwapSlippage)) / BPS;
-        uint256 amountWethMin = (amountWeth * (BPS - unrwapSlippage)) / BPS;
+        // Get amounts in USD given the amount of SLP with slippage
+        uint256 amountTokenUsd = (((_slpAmount * tokenReservesUsd) / slpSupply) * (BPS - unrwapSlippage)) / BPS;
+        uint256 amountWethUsd = (((_slpAmount * wethReservesUsd) / slpSupply) * (BPS - unrwapSlippage)) / BPS;
+
+        // Return tokens denominated in ETH
+        uint256 amountTokenMin = (amountTokenUsd * 1 ether) / (tokenPriceEth * wethPriceUsd);
+        uint256 amountWethMin = (amountWethUsd) / wethPriceUsd;
 
         return (amountTokenMin, amountWethMin);
     }
 
     /// @inheritdoc IMigrator
     function calculateWethWeight(uint256 _tokenAmount) public view returns (uint256) {
-        int256 tokenEthPrice = _tokenPrice();
-
         uint256[] memory normalizedWeights = IManagedPool(address(balancerPool)).getNormalizedWeights();
 
-        uint256 amount = (((_tokenAmount * uint256(tokenEthPrice)) / 1 ether) * normalizedWeights[0]) /
-            normalizedWeights[1];
+        uint256 amount = (((_tokenAmount * _tokenPrice()) / 1 ether) * normalizedWeights[0]) / normalizedWeights[1];
 
         return (amount);
     }
@@ -144,10 +151,8 @@ contract Migrator is IMigrator, Initializable, Ownable {
         uint256 wethBalance = weth.balanceOf(address(this));
         require(wethBalance > wethRequired, "contract doesn't have enough weth");
 
-        int256 tokenEthPrice = _tokenPrice();
-
         uint256 amountWeth = wethBalance - wethRequired;
-        uint256 minAmountOut = (((amountWeth * uint256(tokenEthPrice)) / (1 ether)) * (BPS - swapSlippage)) / BPS;
+        uint256 minAmountOut = (((amountWeth * _tokenPrice()) / (1 ether)) * (BPS - swapSlippage)) / BPS;
         uint256 deadline = block.timestamp;
 
         IVault.SingleSwap memory singleSwap = IVault.SingleSwap({
@@ -261,13 +266,35 @@ contract Migrator is IMigrator, Initializable, Ownable {
      * @dev Make sure price is not stale or incorrect
      * @return Return the correct price
      */
-    function _tokenPrice() internal view returns (int256) {
-        (uint80 roundId, int256 price, , uint256 timestamp, uint80 answeredInRound) = priceFeed.latestRoundData();
+    function _tokenPrice() internal view returns (uint256) {
+        (uint80 roundId, int256 price, , uint256 timestamp, uint80 answeredInRound) = tokenPrice.latestRoundData();
 
         require(answeredInRound >= roundId, "Stale price");
         require(timestamp != 0, "Round not complete");
         require(price > 0, "Chainlink answer reporting 0");
 
-        return price;
+        return uint256(price);
+    }
+
+    /**
+     * @notice Get the price of weth
+     * @dev Make sure price is not stale or incorrect
+     * @return Return the correct price
+     */
+    function _wethPrice() internal view returns (uint256) {
+        (uint80 roundId, int256 price, , uint256 timestamp, uint80 answeredInRound) = wethPrice.latestRoundData();
+
+        require(answeredInRound >= roundId, "Stale price");
+        require(timestamp != 0, "Round not complete");
+        require(price > 0, "Chainlink answer reporting 0");
+
+        return uint256(price);
+    }
+
+    function _slpReserveValues(uint256 _tokenReserve, uint256 _wethReserve) internal view returns (uint256, uint256) {
+        uint256 tokenEthPrice = _tokenPrice();
+        uint256 wethUsdPrice = _wethPrice();
+
+        return (_tokenReserve * tokenEthPrice, _wethReserve * wethUsdPrice);
     }
 }

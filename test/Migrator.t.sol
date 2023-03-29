@@ -39,7 +39,7 @@ contract MigratorTest is BaseTest {
         uint256 slpSupply = slp.totalSupply();
         hevm.assume(_amount < slpSupply && _amount > 0);
 
-        (, int256 tokenEthPrice, , , ) = priceFeed.latestRoundData();
+        (, int256 tokenEthPrice, , , ) = tokenPrice.latestRoundData();
         uint256 amountInEth = (((_amount * uint256(tokenEthPrice)) / 1 ether) * 2000) / 8000;
         uint256 wethAmount = migrator.calculateWethWeight(_amount);
 
@@ -98,7 +98,7 @@ contract MigratorTest is BaseTest {
         hevm.prank(address(migrator));
         migrator.unwrapSlp();
 
-        (, int256 tokenEthPrice, , , ) = priceFeed.latestRoundData();
+        (, int256 tokenEthPrice, , , ) = tokenPrice.latestRoundData();
 
         uint256 tokenBalanceBefore = token.balanceOf(address(migrator));
         uint256 wethBalanceBefore = weth.balanceOf(address(migrator));
