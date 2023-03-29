@@ -2,7 +2,6 @@
 pragma solidity ^0.8.15;
 
 import "src/interfaces/IMigrator.sol";
-import "src/interfaces/IWETH9.sol";
 import "src/interfaces/chainlink/AggregatorV3Interface.sol";
 import "src/interfaces/sushi/IUniswapV2Pair.sol";
 import "src/interfaces/sushi/IUniswapV2Router02.sol";
@@ -14,6 +13,7 @@ import "src/interfaces/balancer/IManagedPool.sol";
 import "src/interfaces/balancer/WeightedMath.sol";
 import "src/interfaces/aura/IRewardPool4626.sol";
 import "solmate/src/tokens/ERC20.sol";
+import "solmate/src/tokens/WETH.sol";
 import "solmate/src/utils/SafeTransferLib.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
@@ -33,7 +33,7 @@ contract Migrator is IMigrator, Initializable, Ownable {
 
     bytes32 public balancerPoolId;
 
-    IWETH9 public weth;
+    WETH public weth;
     ERC20 public token;
     ERC20 public bpt;
     ERC20 public auraBpt;
@@ -53,7 +53,7 @@ contract Migrator is IMigrator, Initializable, Ownable {
 
     /// @inheritdoc IMigrator
     function initialize(InitializationParams memory params) external initializer onlyOwner {
-        weth = IWETH9(params.weth);
+        weth = WETH(payable(params.weth));
         token = ERC20(params.token);
         bpt = ERC20(params.bpt);
         auraBpt = ERC20(params.auraBpt);
@@ -219,6 +219,8 @@ contract Migrator is IMigrator, Initializable, Ownable {
 
         balancerVault.swap(singleSwap, funds, minAmountOut, deadline);
     }
+
+    function _swapWethForTokenAggregator() internal {}
 
     /**
      * @notice Deposit into TOKEN/WETH 80/20 balancer pool

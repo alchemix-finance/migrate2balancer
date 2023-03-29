@@ -15,7 +15,7 @@ contract BaseTest is DSTestPlus {
     TransparentUpgradeableProxy migratorHarnessProxy;
 
     // Initialization parameters
-    IWETH9 public weth = IWETH9(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    WETH public weth = WETH(payable(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2));
     IERC20 public token = IERC20(0xdBdb4d16EdA451D0503b854CF79D55697F90c8DF);
     IERC20 public bpt = IERC20(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
     IERC20 public auraBpt = IERC20(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);

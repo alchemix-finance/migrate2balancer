@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3
 pragma solidity ^0.8.15;
 
+import "solmate/src/tokens/WETH.sol";
+
 interface IMigrator {
     /**
      * @notice Parameters to initialize Migrator
