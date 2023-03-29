@@ -13,8 +13,8 @@ import "src/interfaces/balancer/IAsset.sol";
 import "src/interfaces/balancer/IManagedPool.sol";
 import "src/interfaces/balancer/WeightedMath.sol";
 import "src/interfaces/aura/IRewardPool4626.sol";
-import "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "solmate/src/tokens/ERC20.sol";
+import "solmate/src/utils/SafeTransferLib.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import "openzeppelin-contracts/contracts/proxy/transparent/ProxyAdmin.sol";
@@ -25,7 +25,7 @@ import "openzeppelin-contracts/contracts/proxy/transparent/TransparentUpgradeabl
  * @notice Tool to facilitate migrating a sushi SLP position to a BPT or auraBPT position
  */
 contract Migrator is IMigrator, Initializable, Ownable {
-    using SafeERC20 for IERC20;
+    using SafeTransferLib for ERC20;
 
     uint256 public constant BPS = 10000;
     uint256 public unrwapSlippage = 10; // 0.1%
@@ -34,9 +34,9 @@ contract Migrator is IMigrator, Initializable, Ownable {
     bytes32 public balancerPoolId;
 
     IWETH9 public weth;
-    IERC20 public token;
-    IERC20 public bpt;
-    IERC20 public auraBpt;
+    ERC20 public token;
+    ERC20 public bpt;
+    ERC20 public auraBpt;
     IUniswapV2Pair public slp;
     IRewardPool4626 public auraPool;
     AggregatorV3Interface public priceFeed;
@@ -53,9 +53,9 @@ contract Migrator is IMigrator, Initializable, Ownable {
     /// @inheritdoc IMigrator
     function initialize(InitializationParams memory params) external initializer onlyOwner {
         weth = IWETH9(params.weth);
-        token = IERC20(params.token);
-        bpt = IERC20(params.bpt);
-        auraBpt = IERC20(params.auraBpt);
+        token = ERC20(params.token);
+        bpt = ERC20(params.bpt);
+        auraBpt = ERC20(params.auraBpt);
         slp = IUniswapV2Pair(params.slp);
         auraPool = IRewardPool4626(params.auraPool);
         priceFeed = AggregatorV3Interface(params.priceFeed);
@@ -87,10 +87,10 @@ contract Migrator is IMigrator, Initializable, Ownable {
 
     /// @inheritdoc IMigrator
     function setApprovals() public onlyOwner {
-        weth.approve(address(balancerVault), type(uint256).max);
-        token.approve(address(balancerVault), type(uint256).max);
-        bpt.approve(address(auraPool), type(uint256).max);
-        slp.approve(address(sushiRouter), type(uint256).max);
+        ERC20(address(weth)).safeApprove(address(balancerVault), type(uint256).max);
+        token.safeApprove(address(balancerVault), type(uint256).max);
+        bpt.safeApprove(address(auraPool), type(uint256).max);
+        ERC20(address(slp)).safeApprove(address(sushiRouter), type(uint256).max);
     }
 
     /// @inheritdoc IMigrator
@@ -189,7 +189,7 @@ contract Migrator is IMigrator, Initializable, Ownable {
             balances,
             normalizedWeights,
             amountsIn,
-            IERC20(address(balancerPool)).totalSupply(),
+            ERC20(address(balancerPool)).totalSupply(),
             balancerPool.getSwapFeePercentage()
         );
 
@@ -231,7 +231,7 @@ contract Migrator is IMigrator, Initializable, Ownable {
     function migrate(bool _stakeBpt) external {
         uint256 slpBalance = slp.balanceOf(msg.sender);
 
-        IERC20(address(slp)).safeTransferFrom(msg.sender, address(this), slpBalance);
+        ERC20(address(slp)).safeTransferFrom(msg.sender, address(this), slpBalance);
 
         unwrapSlp();
 
