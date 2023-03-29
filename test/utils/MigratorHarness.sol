@@ -3,6 +3,10 @@ pragma solidity ^0.8.15;
 
 import "src/Migrator.sol";
 
+/**
+ * @title  Migrator Harness Contract
+ * @notice Harness contract only for testing internal functions on Migrator
+ */
 contract MigratorHarness is Migrator {
     function exposed_calculateSlpAmounts(uint256 _slpAmount) external view returns (uint256, uint256) {
         return _calculateSlpAmounts(_slpAmount);
