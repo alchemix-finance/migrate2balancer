@@ -2,7 +2,6 @@
 pragma solidity ^0.8.15;
 
 import "src/interfaces/IMigrator.sol";
-import "src/interfaces/IWETH9.sol";
 import "src/interfaces/chainlink/AggregatorV3Interface.sol";
 import "src/interfaces/sushi/IUniswapV2Pair.sol";
 import "src/interfaces/sushi/IUniswapV2Router02.sol";
@@ -13,68 +12,58 @@ import "src/interfaces/balancer/IAsset.sol";
 import "src/interfaces/balancer/IManagedPool.sol";
 import "src/interfaces/balancer/WeightedMath.sol";
 import "src/interfaces/aura/IRewardPool4626.sol";
-import "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "solmate/src/tokens/ERC20.sol";
+import "solmate/src/tokens/WETH.sol";
+import "solmate/src/utils/SafeTransferLib.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
-import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
-import "openzeppelin-contracts/contracts/proxy/transparent/ProxyAdmin.sol";
-import "openzeppelin-contracts/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 /**
- * @title  Sushi to Balancer migrator
- * @notice Tool to facilitate migrating a sushi SLP position to a BPT or auraBPT position
+ * @title  Sushi to Balancer LP migrator
+ * @notice Tool to facilitate migrating Sushi LPs to Balancer or Aura
+ * @dev SLP: SushiSwap LP Token
+ * @dev BPT: 20WETH-80TOKEN Balancer Pool Token
+ * @dev auraBPT: 20WETH-80TOKEN Aura Deposit Vault
  */
-contract Migrator is IMigrator, Initializable, Ownable {
-    using SafeERC20 for IERC20;
+contract Migrator is IMigrator, Ownable {
+    using SafeTransferLib for ERC20;
 
-    uint256 public constant BPS = 10000;
-    uint256 public unrwapSlippage = 10; // 0.1%
     uint256 public swapSlippage = 10; // 0.1%
 
-    bytes32 public balancerPoolId;
-
-    IWETH9 public weth;
-    IERC20 public token;
-    IERC20 public bpt;
-    IERC20 public auraBpt;
-    IUniswapV2Pair public slp;
-    IRewardPool4626 public auraPool;
-    AggregatorV3Interface public priceFeed;
-    IUniswapV2Router02 public sushiRouter;
-    IVault public balancerVault;
-    IBasePool public balancerPool;
-    IAsset[] public poolAssets = new IAsset[](2);
+    uint256 public immutable BPS = 10000;
+    bytes32 public immutable balancerPoolId;
+    WETH public immutable weth;
+    ERC20 public immutable token;
+    ERC20 public immutable balancerPoolToken;
+    ERC20 public immutable auraDepositToken;
+    IUniswapV2Pair public immutable sushiLpToken;
+    IRewardPool4626 public immutable auraPool;
+    AggregatorV3Interface public immutable tokenPrice;
+    IUniswapV2Router02 public immutable sushiRouter;
+    IVault public immutable balancerVault;
+    IBasePool public immutable balancerPool;
+    IAsset public immutable poolAssetWeth;
+    IAsset public immutable poolAssetToken;
 
     /*
         Admin functions
     */
 
-    /// @inheritdoc IMigrator
-    function initialize(InitializationParams memory params) external initializer onlyOwner {
-        weth = IWETH9(params.weth);
-        token = IERC20(params.token);
-        bpt = IERC20(params.bpt);
-        auraBpt = IERC20(params.auraBpt);
-        slp = IUniswapV2Pair(params.slp);
+    constructor(InitializationParams memory params) Ownable() {
+        weth = WETH(payable(params.weth));
+        token = ERC20(params.token);
+        balancerPoolToken = ERC20(params.balancerPoolToken);
+        auraDepositToken = ERC20(params.auraDepositToken);
+        sushiLpToken = IUniswapV2Pair(params.sushiLpToken);
         auraPool = IRewardPool4626(params.auraPool);
-        priceFeed = AggregatorV3Interface(params.priceFeed);
+        tokenPrice = AggregatorV3Interface(params.tokenPrice);
         sushiRouter = IUniswapV2Router02(params.sushiRouter);
         balancerVault = IVault(params.balancerVault);
-        balancerPool = IBasePool(address(bpt));
+        balancerPool = IBasePool(address(balancerPoolToken));
         balancerPoolId = balancerPool.getPoolId();
-        poolAssets[0] = IAsset(address(weth));
-        poolAssets[1] = IAsset(params.token);
+        poolAssetWeth = IAsset(address(weth));
+        poolAssetToken = IAsset(params.token);
 
-        weth.approve(address(balancerVault), type(uint256).max);
-        token.approve(address(balancerVault), type(uint256).max);
-        bpt.approve(address(auraPool), type(uint256).max);
-        slp.approve(address(sushiRouter), type(uint256).max);
-    }
-
-    /// @inheritdoc IMigrator
-    function setUnrwapSlippage(uint256 _amount) external onlyOwner {
-        require(_amount <= BPS, "unwrap slippage too high");
-        unrwapSlippage = _amount;
+        setApprovals();
     }
 
     /// @inheritdoc IMigrator
@@ -83,72 +72,96 @@ contract Migrator is IMigrator, Initializable, Ownable {
         swapSlippage = _amount;
     }
 
+    /// @inheritdoc IMigrator
+    function setApprovals() public onlyOwner {
+        ERC20(address(weth)).safeApprove(address(balancerVault), type(uint256).max);
+        token.safeApprove(address(balancerVault), type(uint256).max);
+        balancerPoolToken.safeApprove(address(auraPool), type(uint256).max);
+        ERC20(address(sushiLpToken)).safeApprove(address(sushiRouter), type(uint256).max);
+    }
+
     /*
-        Public functions
+        External functions
     */
 
     /// @inheritdoc IMigrator
-    function calculateSlpAmounts(uint256 _slpAmount) public view returns (uint256, uint256) {
-        uint256 slpSupply = slp.totalSupply();
-        (uint256 wethReserves, uint256 tokenReserves, ) = slp.getReserves();
+    function migrate(bool _stakeBpt, uint256 _amountTokenMin, uint256 _amountWethMin) external {
+        uint256 slpBalance = sushiLpToken.balanceOf(msg.sender);
 
-        // Calculate the amount of tokens and WETH the user will receive
-        uint256 amountToken = (_slpAmount * tokenReserves) / slpSupply;
-        uint256 amountWeth = (_slpAmount * wethReserves) / slpSupply;
+        ERC20(address(sushiLpToken)).safeTransferFrom(msg.sender, address(this), slpBalance);
 
-        // Calculate the minimum amounts with unrwapSlippage tolerance
-        uint256 amountTokenMin = (amountToken * (BPS - unrwapSlippage)) / BPS;
-        uint256 amountWethMin = (amountWeth * (BPS - unrwapSlippage)) / BPS;
+        _unwrapSlp(_amountTokenMin, _amountWethMin);
 
-        return (amountTokenMin, amountWethMin);
+        _swapWethForTokenBalancer();
+
+        _depositIntoBalancerPool();
+
+        // msg.sender receives auraBPT or BPT depending on their choice to deposit into Aura pool
+        if (_stakeBpt) {
+            _depositIntoRewardsPool();
+        } else {
+            balancerPoolToken.safeTransferFrom(address(this), msg.sender, balancerPoolToken.balanceOf(address(this)));
+        }
+
+        emit Migrated(msg.sender, slpBalance, _stakeBpt);
     }
 
-    /// @inheritdoc IMigrator
-    function calculateWethWeight(uint256 _tokenAmount) public view returns (uint256) {
-        (, int256 tokenEthPrice, , , ) = priceFeed.latestRoundData();
+    receive() external payable {
+        require(msg.sender != address(weth), "WETH cannot be sent directly");
+    }
 
+    /*
+        Internal functions
+    */
+
+    /**
+     * @notice Get the amount WETH required to create balanced pool deposit
+     * @param _tokenAmount Amount of TOKEN to deposit
+     * @return uint256 Amount of WETH required to create 80/20 balanced deposit
+     */
+    function _calculateWethWeight(uint256 _tokenAmount) internal view returns (uint256) {
         uint256[] memory normalizedWeights = IManagedPool(address(balancerPool)).getNormalizedWeights();
 
-        uint256 amount = (((_tokenAmount * uint256(tokenEthPrice)) / 1 ether) * normalizedWeights[0]) /
-            normalizedWeights[1];
+        uint256 amount = (((_tokenAmount * _tokenPrice()) / 1 ether) * normalizedWeights[0]) / normalizedWeights[1];
 
         return (amount);
     }
 
-    /// @inheritdoc IMigrator
-    function unwrapSlp() public {
-        uint256 deadline = block.timestamp + 300;
-        uint256 slpAmount = slp.balanceOf(address(this));
-
-        (uint256 amountTokenMin, uint256 amountWethMin) = calculateSlpAmounts(slpAmount);
+    /**
+     * @notice Unrwap SLP into TOKEN and WETH
+     */
+    function _unwrapSlp(uint256 _amountTokenMin, uint256 _amountWethMin) internal {
+        uint256 slpAmount = sushiLpToken.balanceOf(address(this));
 
         sushiRouter.removeLiquidityETH(
             address(token),
             slpAmount,
-            amountTokenMin,
-            amountWethMin,
+            _amountTokenMin,
+            _amountWethMin,
             address(this),
-            deadline
+            block.timestamp
         );
+
+        weth.deposit{ value: address(this).balance }();
     }
 
-    /// @inheritdoc IMigrator
-    function swapWethForTokenBalancer() public {
-        uint256 wethRequired = calculateWethWeight(token.balanceOf(address(this)));
+    /**
+     * @notice Swap WETH for TOKEN to have balanced 80/20 TOKEN/WETH
+     */
+    function _swapWethForTokenBalancer() internal {
+        uint256 wethRequired = _calculateWethWeight(token.balanceOf(address(this)));
         uint256 wethBalance = weth.balanceOf(address(this));
         require(wethBalance > wethRequired, "contract doesn't have enough weth");
 
-        (, int256 tokenEthPrice, , , ) = priceFeed.latestRoundData();
-
+        // Amount of excess WETH to swap
         uint256 amountWeth = wethBalance - wethRequired;
-        uint256 minAmountOut = (((amountWeth * uint256(tokenEthPrice)) / (1 ether)) * (BPS - swapSlippage)) / BPS;
-        uint256 deadline = block.timestamp;
+        uint256 minAmountOut = (((amountWeth * _tokenPrice()) / (1 ether)) * (BPS - swapSlippage)) / BPS;
 
         IVault.SingleSwap memory singleSwap = IVault.SingleSwap({
             poolId: balancerPoolId,
             kind: IVault.SwapKind.GIVEN_IN,
-            assetIn: IAsset(address(weth)),
-            assetOut: IAsset(address(token)),
+            assetIn: poolAssetWeth,
+            assetOut: poolAssetToken,
             amount: amountWeth,
             userData: bytes("")
         });
@@ -160,11 +173,13 @@ contract Migrator is IMigrator, Initializable, Ownable {
             toInternalBalance: false
         });
 
-        balancerVault.swap(singleSwap, funds, minAmountOut, deadline);
+        balancerVault.swap(singleSwap, funds, minAmountOut, block.timestamp);
     }
 
-    /// @inheritdoc IMigrator
-    function depositIntoBalancerPool() public {
+    /**
+     * @notice Deposit into TOKEN/WETH 80/20 balancer pool
+     */
+    function _depositIntoBalancerPool() internal {
         uint256[] memory normalizedWeights = IManagedPool(address(balancerPool)).getNormalizedWeights();
         (, uint256[] memory balances, ) = balancerVault.getPoolTokens(balancerPoolId);
 
@@ -175,11 +190,15 @@ contract Migrator is IMigrator, Initializable, Ownable {
         amountsIn[0] = wethAmount;
         amountsIn[1] = tokenAmount;
 
+        IAsset[] memory poolAssets = new IAsset[](2);
+        poolAssets[0] = poolAssetWeth;
+        poolAssets[1] = poolAssetToken;
+
         uint256 bptAmountOut = WeightedMath._calcBptOutGivenExactTokensIn(
             balances,
             normalizedWeights,
             amountsIn,
-            IERC20(address(balancerPool)).totalSupply(),
+            ERC20(address(balancerPool)).totalSupply(),
             balancerPool.getSwapFeePercentage()
         );
 
@@ -199,46 +218,27 @@ contract Migrator is IMigrator, Initializable, Ownable {
         balancerVault.joinPool(balancerPoolId, address(this), address(this), request);
     }
 
-    /// @inheritdoc IMigrator
-    function depositIntoRewardsPool() public {
-        uint256 amount = bpt.balanceOf(address(this));
+    /**
+     * @notice Deposit BPT into rewards pool
+     */
+    function _depositIntoRewardsPool() internal {
+        uint256 amount = balancerPoolToken.balanceOf(address(this));
 
         auraPool.deposit(amount, msg.sender);
     }
 
-    /// @inheritdoc IMigrator
-    function userDepositIntoRewardsPool() public {
-        uint256 amount = bpt.balanceOf(msg.sender);
-        bpt.safeTransferFrom(msg.sender, address(this), amount);
-        auraPool.deposit(amount, msg.sender);
-    }
+    /**
+     * @notice Get the price of a token
+     * @dev Make sure price is not stale or incorrect
+     * @return Return the correct price
+     */
+    function _tokenPrice() internal view returns (uint256) {
+        (uint80 roundId, int256 price, , uint256 timestamp, uint80 answeredInRound) = tokenPrice.latestRoundData();
 
-    /*
-        External functions
-    */
+        require(answeredInRound >= roundId, "Stale price");
+        require(timestamp != 0, "Round not complete");
+        require(price > 0, "Chainlink answer reporting 0");
 
-    /// @inheritdoc IMigrator
-    function migrate(bool _stakeBpt) external {
-        uint256 slpBalance = slp.balanceOf(msg.sender);
-
-        IERC20(address(slp)).safeTransferFrom(msg.sender, address(this), slpBalance);
-
-        unwrapSlp();
-
-        swapWethForTokenBalancer();
-
-        depositIntoBalancerPool();
-
-        // msg.sender receives auraBPT or BPT depending on their choice to deposit into Aura pool
-        if (_stakeBpt) depositIntoRewardsPool();
-        else bpt.safeTransferFrom(address(this), msg.sender, bpt.balanceOf(address(this)));
-
-        emit Migrated(msg.sender, slpBalance, _stakeBpt);
-    }
-
-    receive() external payable {
-        if (msg.value > 0) {
-            weth.deposit{ value: msg.value }();
-        }
+        return uint256(price);
     }
 }
