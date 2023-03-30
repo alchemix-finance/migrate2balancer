@@ -42,7 +42,7 @@ contract Migrator is IMigrator, Ownable {
     IVault public immutable balancerVault;
     IBasePool public immutable balancerPool;
     IAsset public immutable poolAssetWeth;
-    IAsset immutable poolAssetToken;
+    IAsset public immutable poolAssetToken;
 
     /*
         Admin functions
@@ -107,10 +107,7 @@ contract Migrator is IMigrator, Ownable {
     }
 
     receive() external payable {
-        require(_isContract(msg.sender), "Users cannot send WETH");
-        if (msg.value > 0) {
-            weth.deposit{ value: msg.value }();
-        }
+        require(msg.sender != address(weth), "WETH cannot be sent directly");
     }
 
     /*
@@ -144,6 +141,8 @@ contract Migrator is IMigrator, Ownable {
             address(this),
             block.timestamp
         );
+
+        weth.deposit{ value: address(this).balance }();
     }
 
     /**
@@ -241,16 +240,5 @@ contract Migrator is IMigrator, Ownable {
         require(price > 0, "Chainlink answer reporting 0");
 
         return uint256(price);
-    }
-
-    /**
-     * @notice Check if address is a contract
-     */
-    function _isContract(address _address) internal view returns (bool) {
-        uint256 size;
-        assembly {
-            size := extcodesize(_address)
-        }
-        return size > 0;
     }
 }
