@@ -8,16 +8,14 @@ import "src/Migrator.sol";
  * @notice Harness contract only for testing internal functions on Migrator
  */
 contract MigratorHarness is Migrator {
-    function exposed_calculateSlpAmounts(uint256 _slpAmount) external view returns (uint256, uint256) {
-        return _calculateSlpAmounts(_slpAmount);
-    }
+    constructor(InitializationParams memory params) Migrator(params) {}
 
     function exposed_calculateWethWeight(uint256 _tokenAmount) external view returns (uint256) {
         return _calculateWethWeight(_tokenAmount);
     }
 
-    function exposed_unwrapSlp() external {
-        return _unwrapSlp();
+    function exposed_unwrapSlp(uint256 _amountTokenMin, uint256 _amountWethMin) external {
+        return _unwrapSlp(_amountTokenMin, _amountWethMin);
     }
 
     function exposed_swapWethForTokenBalancer() external {
@@ -30,5 +28,9 @@ contract MigratorHarness is Migrator {
 
     function exposed_depositIntoRewardsPool() external {
         return _depositIntoRewardsPool();
+    }
+
+    function exposed_tokenPrice() external view returns (uint256) {
+        return _tokenPrice();
     }
 }
