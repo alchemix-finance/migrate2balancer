@@ -4,15 +4,12 @@ pragma solidity ^0.8.15;
 import "lib/forge-std/src/console2.sol";
 import "./utils/DSTestPlus.sol";
 import "src/Migrator.sol";
-import "src/interfaces/chainlink/AggregatorV3Interface.sol";
 import "src/interfaces/balancer/IManagedPool.sol";
 import "src/interfaces/balancer/WeightedMath.sol";
+import "src/interfaces/chainlink/AggregatorV3Interface.sol";
 
 contract BaseTest is DSTestPlus {
     Migrator public migrator;
-
-    // Constructor param
-    ERC20 public weth = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
     // Migration Addresses
     ERC20 public token = ERC20(0xdBdb4d16EdA451D0503b854CF79D55697F90c8DF);
@@ -29,15 +26,16 @@ contract BaseTest is DSTestPlus {
     uint256 public BPS = 10000;
     AggregatorV3Interface public wethPrice = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
     AggregatorV3Interface public tokenPrice = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
+    ERC20 public weth = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
     function setUp() public {
         user = hevm.addr(userPrivateKey);
 
-        migrator = new Migrator(address(weth));
+        migrator = new Migrator();
     }
 
     /*
-        Helper functions (only used for testing, should be done off-chain in UI)
+        Helper functions (used for testing, should be done off-chain in UI)
     */
 
     /**

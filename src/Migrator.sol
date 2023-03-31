@@ -24,11 +24,7 @@ contract Migrator is IMigrator {
     using SafeTransferLib for ERC20;
 
     uint256 public immutable BPS = 10000;
-    WETH public immutable weth;
-
-    constructor(address _weth) {
-        weth = WETH(payable(_weth));
-    }
+    WETH public immutable weth = WETH(payable(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2));
 
     /*
         External functions
