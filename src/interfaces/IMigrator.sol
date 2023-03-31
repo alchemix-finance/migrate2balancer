@@ -13,7 +13,6 @@ interface IMigrator {
         address balancerPoolToken;
         address sushiLpToken;
         address auraPool;
-        address tokenPrice;
         address sushiRouter;
         address balancerVault;
     }
@@ -21,10 +20,10 @@ interface IMigrator {
     /**
      * @notice Emitted when an account migrates from SLP to BPT or auraBPT
      * @param account The account migrating
-     * @param amountBpt The amount of BPT minted
+     * @param amountReceived The amount of BPT or auraBPT received
      * @param staked Indicates if the account received auraBPT
      */
-    event Migrated(address indexed account, uint256 amountBpt, bool staked);
+    event Migrated(address indexed account, uint256 amountReceived, bool staked);
 
     /**
      * @notice Migrate SLP position into BPT position

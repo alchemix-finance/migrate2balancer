@@ -3,11 +3,14 @@ pragma solidity ^0.8.15;
 
 import "lib/forge-std/src/console2.sol";
 import "./utils/DSTestPlus.sol";
-import "src/Migrator.sol";
-import "src/interfaces/IMigrator.sol";
+import "src/factories/MigratorFactory.sol";
+import "src/interfaces/chainlink/AggregatorV3Interface.sol";
+import "src/interfaces/balancer/IManagedPool.sol";
+import "src/interfaces/balancer/WeightedMath.sol";
 
 contract BaseTest is DSTestPlus {
     Migrator public migrator;
+    MigratorFactory public migratorFactory;
 
     // Initialization parameters
     WETH public weth = WETH(payable(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2));
@@ -15,15 +18,16 @@ contract BaseTest is DSTestPlus {
     ERC20 public balancerPoolToken = ERC20(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
     ERC20 public auraDepositToken = ERC20(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
     IUniswapV2Pair public sushiLpToken = IUniswapV2Pair(0xC3f279090a47e80990Fe3a9c30d24Cb117EF91a8);
-    AggregatorV3Interface public tokenPrice = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
     IUniswapV2Router02 public sushiRouter = IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
     IVault public balancerVault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
 
     // Test variables
     address public user;
     uint256 public userPrivateKey = 0xBEEF;
-    uint256 public BPS = 10000;
     uint256 public slippage = 10;
+    uint256 public BPS = 10000;
+    AggregatorV3Interface public wethPrice = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
+    AggregatorV3Interface public tokenPrice = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
 
     IMigrator.InitializationParams public params =
         IMigrator.InitializationParams(
@@ -32,15 +36,19 @@ contract BaseTest is DSTestPlus {
             address(balancerPoolToken),
             address(sushiLpToken),
             address(auraDepositToken),
-            address(tokenPrice),
             address(sushiRouter),
             address(balancerVault)
         );
 
+    /**
+     * @notice Deploy MigratorFactory and create first Migrator
+     */
     function setUp() public {
         user = hevm.addr(userPrivateKey);
 
-        migrator = new Migrator(params);
+        migratorFactory = new MigratorFactory();
+
+        migrator = Migrator(payable(migratorFactory.createMigrator(params)));
     }
 
     /*
@@ -150,8 +158,6 @@ contract BaseTest is DSTestPlus {
      * @return Return the correct price
      */
     function _wethPrice() internal view returns (uint256) {
-        AggregatorV3Interface wethPrice = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
-
         (uint80 roundId, int256 price, , uint256 timestamp, uint80 answeredInRound) = wethPrice.latestRoundData();
 
         require(answeredInRound >= roundId, "Stale price");

@@ -2,22 +2,19 @@
 pragma solidity ^0.8.15;
 
 import "src/interfaces/IMigrator.sol";
-import "src/interfaces/chainlink/AggregatorV3Interface.sol";
 import "src/interfaces/sushi/IUniswapV2Pair.sol";
 import "src/interfaces/sushi/IUniswapV2Router02.sol";
 import "src/interfaces/balancer/IVault.sol";
 import "src/interfaces/balancer/WeightedPoolUserData.sol";
 import "src/interfaces/balancer/IBasePool.sol";
 import "src/interfaces/balancer/IAsset.sol";
-import "src/interfaces/balancer/IManagedPool.sol";
-import "src/interfaces/balancer/WeightedMath.sol";
 import "src/interfaces/aura/IRewardPool4626.sol";
 import "solmate/src/tokens/ERC20.sol";
 import "solmate/src/tokens/WETH.sol";
 import "solmate/src/utils/SafeTransferLib.sol";
 
 /**
- * @title  Sushi to Balancer LP migrator
+ * @title Sushi to Balancer LP migrator
  * @notice Tool to facilitate migrating Sushi LPs to Balancer or Aura
  * @dev SLP: SushiSwap LP Token
  * @dev BPT: 20WETH-80TOKEN Balancer Pool Token
@@ -34,7 +31,6 @@ contract Migrator is IMigrator {
     ERC20 public immutable auraDepositToken;
     IUniswapV2Pair public immutable sushiLpToken;
     IRewardPool4626 public immutable auraPool;
-    AggregatorV3Interface public immutable tokenPrice;
     IUniswapV2Router02 public immutable sushiRouter;
     IVault public immutable balancerVault;
     IBasePool public immutable balancerPool;
@@ -48,7 +44,6 @@ contract Migrator is IMigrator {
         auraDepositToken = ERC20(params.auraPool);
         sushiLpToken = IUniswapV2Pair(params.sushiLpToken);
         auraPool = IRewardPool4626(params.auraPool);
-        tokenPrice = AggregatorV3Interface(params.tokenPrice);
         sushiRouter = IUniswapV2Router02(params.sushiRouter);
         balancerVault = IVault(params.balancerVault);
         balancerPool = IBasePool(address(balancerPoolToken));
@@ -75,8 +70,6 @@ contract Migrator is IMigrator {
         uint256 _minAmountTokenOut,
         uint256 _amountBptOut
     ) external {
-        // uint256 slpBalance = sushiLpToken.balanceOf(msg.sender);
-
         ERC20(address(sushiLpToken)).safeTransferFrom(msg.sender, address(this), sushiLpToken.balanceOf(msg.sender));
 
         // Unrwap SLP into TOKEN and WETH
@@ -137,14 +130,16 @@ contract Migrator is IMigrator {
 
         balancerVault.joinPool(balancerPoolId, address(this), address(this), request);
 
+        uint256 amountReceived = balancerPoolToken.balanceOf(address(this));
+
         // msg.sender receives auraBPT or BPT depending on their choice to deposit into Aura pool
         if (_stakeBpt) {
-            auraPool.deposit(balancerPoolToken.balanceOf(address(this)), msg.sender);
+            auraPool.deposit(amountReceived, msg.sender);
         } else {
-            balancerPoolToken.safeTransferFrom(address(this), msg.sender, balancerPoolToken.balanceOf(address(this)));
+            balancerPoolToken.safeTransferFrom(address(this), msg.sender, amountReceived);
         }
 
-        emit Migrated(msg.sender, balancerPoolToken.balanceOf(address(this)), _stakeBpt);
+        emit Migrated(msg.sender, amountReceived, _stakeBpt);
     }
 
     /// @inheritdoc IMigrator
