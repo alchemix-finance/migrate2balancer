@@ -2,7 +2,7 @@
 
 -include .env
 
-# file to test 
+# specific file 
 FILE=
 
 # specific test to run
@@ -24,7 +24,10 @@ MATCH_PATH=--match-path test/$(FILE).t.sol
 MATCH_TEST=--match-test $(TEST)
 
 # rpc url
-FORK_URL=--fork-url https://eth-mainnet.alchemyapi.io/v2/$(ALCHEMY_API_KEY)
+RPC=https://eth-mainnet.alchemyapi.io/v2/$(ALCHEMY_API_KEY)
+
+# fork from rpc
+FORK_URL=--fork-url $(RPC)
 
 # generates and serves documentation locally on port 4000
 docs_local :; forge doc --serve --port 4000
@@ -70,3 +73,21 @@ test_file_debug_test :; FOUNDRY_PROFILE=$(PROFILE) forge test $(FORK_URL) $(MATC
 
 # runs single test within file with added verbosity for failing test from a given block: "make test_file_block_debug_test FILE=<filename> TEST=<testname>"
 test_file_block_debug_test :; FOUNDRY_PROFILE=$(PROFILE) forge test $(FORK_URL) $(MATCH_PATH) $(MATCH_TEST) $(FORK_BLOCK) -vvv
+
+
+# shortcuts for deploying contracts
+
+# add constructor args if needed "$$(cast abi-encode "constructor(address,address)" "0xbeef" "0xbeef")"
+ARGS=--constructor-args
+
+# etherscan verification
+VERIFY=--etherscan-api-key $(ETHERSCAN_API_KEY) --verify
+
+# private key for deployment
+KEY=--private-key $(PRIVATE_KEY)
+
+# deployment command
+DEPLOY=--rpc-url $(RPC) $(ARGS) $(KEY) $(VERIFY) src/$(FILE).sol:$(FILE)
+
+# Deploy a contract (assumes file and contract name match) "make deploy_mainnet FILE=<filename> ARGS=<constructor args>
+deploy_mainnet :; forge create $(DEPLOY)
