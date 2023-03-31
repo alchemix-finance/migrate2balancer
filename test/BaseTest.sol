@@ -3,22 +3,23 @@ pragma solidity ^0.8.15;
 
 import "lib/forge-std/src/console2.sol";
 import "./utils/DSTestPlus.sol";
-import "src/factories/MigratorFactory.sol";
+import "src/Migrator.sol";
 import "src/interfaces/chainlink/AggregatorV3Interface.sol";
 import "src/interfaces/balancer/IManagedPool.sol";
 import "src/interfaces/balancer/WeightedMath.sol";
 
 contract BaseTest is DSTestPlus {
     Migrator public migrator;
-    MigratorFactory public migratorFactory;
 
-    // Initialization parameters
-    WETH public weth = WETH(payable(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2));
+    // Constructor param
+    ERC20 public weth = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+
+    // Migration Addresses
     ERC20 public token = ERC20(0xdBdb4d16EdA451D0503b854CF79D55697F90c8DF);
     ERC20 public balancerPoolToken = ERC20(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
-    ERC20 public auraDepositToken = ERC20(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
-    IUniswapV2Pair public sushiLpToken = IUniswapV2Pair(0xC3f279090a47e80990Fe3a9c30d24Cb117EF91a8);
-    IUniswapV2Router02 public sushiRouter = IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
+    IUniswapV2Pair public lpToken = IUniswapV2Pair(0xC3f279090a47e80990Fe3a9c30d24Cb117EF91a8);
+    ERC20 public auraPool = ERC20(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
+    address public router = address(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
     IVault public balancerVault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
 
     // Test variables
@@ -29,26 +30,10 @@ contract BaseTest is DSTestPlus {
     AggregatorV3Interface public wethPrice = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
     AggregatorV3Interface public tokenPrice = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
 
-    IMigrator.InitializationParams public params =
-        IMigrator.InitializationParams(
-            address(weth),
-            address(token),
-            address(balancerPoolToken),
-            address(sushiLpToken),
-            address(auraDepositToken),
-            address(sushiRouter),
-            address(balancerVault)
-        );
-
-    /**
-     * @notice Deploy MigratorFactory and create first Migrator
-     */
     function setUp() public {
         user = hevm.addr(userPrivateKey);
 
-        migratorFactory = new MigratorFactory();
-
-        migrator = Migrator(payable(migratorFactory.createMigrator(params)));
+        migrator = new Migrator(address(weth));
     }
 
     /*
@@ -56,46 +41,72 @@ contract BaseTest is DSTestPlus {
     */
 
     /**
-     * @notice All parameters that need to be calculated off-chain
-     * @param _amount Amount of SLP tokens
-     * @return amountTokenMin
-     * @return amountWethMin
-     * @return wethRequired
-     * @return minAmountTokenOut
-     * @return amountBptOut
+     * @notice All address that need to be passed in for migration
+     * @return Returns the MigrationAddresses struct
      */
-    function offChainParams(uint256 _amount) public view returns (uint256, uint256, uint256, uint256, uint256) {
-        // Calculate min amount of Token and WETH from SLP
-        (uint256 amountTokenMin, uint256 amountWethMin) = _calculateSlpAmounts(_amount);
+    function getMigrationAddresses() public view returns (IMigrator.MigrationAddresses memory) {
+        IMigrator.MigrationAddresses memory migrationAddresses = IMigrator.MigrationAddresses(
+            address(token),
+            address(balancerPoolToken),
+            address(lpToken),
+            address(auraPool),
+            address(router),
+            address(balancerVault)
+        );
+
+        return migrationAddresses;
+    }
+
+    /**
+     * @notice Off-chain calculations
+     * @param _amount Amount of LP tokens
+     * @param _stakeBpt Indicates decision to stake in Aura pool
+     * @return Returns the MigrationDetails struct
+     */
+    function getMigrationDetails(
+        uint256 _amount,
+        bool _stakeBpt
+    ) public view returns (IMigrator.MigrationDetails memory) {
+        // Calculate min amount of Token and WETH from LP
+        (uint256 amountTokenMin, uint256 amountWethMin) = _calculateLpAmounts(_amount);
         // Calculate amount of WETH given amount of Token to create 80/20 TOKEN/WETH balance
         uint256 wethRequired = _calculateWethRequired(amountTokenMin);
-        // Calculate amount of Token out given the excess amount of WETH since we are rebalancing to 80/20 Token/WETH (amountWethMin is always > wethRequired)
+        // Calculate amount of Tokens out given the excess amount of WETH due to 80/20 TOKEN/WETH rebalance (amountWethMin is always > wethRequired)
         uint256 minAmountTokenOut = _calculateTokenAmountOut(amountWethMin - wethRequired);
         // Calculate amount of BPT out given Tokens and WETH (add original and predicted swapped amounts of token)
         uint256 amountBptOut = _calculateBptAmountOut(amountTokenMin + minAmountTokenOut, wethRequired);
 
-        return (amountTokenMin, amountWethMin, wethRequired, minAmountTokenOut, amountBptOut);
+        IMigrator.MigrationDetails memory migrationDetails = IMigrator.MigrationDetails(
+            _stakeBpt,
+            amountTokenMin,
+            amountWethMin,
+            wethRequired,
+            minAmountTokenOut,
+            amountBptOut
+        );
+
+        return migrationDetails;
     }
 
     /**
-     * @notice Calculate the min amount of TOKEN and WETH for a given SLP amount
-     * @param _slpAmount The amount of SLP
+     * @notice Calculate the min amount of TOKEN and WETH for a given LP amount
+     * @param _lpAmount The amount of LP
      * @return Return values for min amount out of TOKEN and WETH with unwrap slippage
      * @dev Calculation used for testing, in production values should be calculated in UI
      */
-    function _calculateSlpAmounts(uint256 _slpAmount) internal view returns (uint256, uint256) {
+    function _calculateLpAmounts(uint256 _lpAmount) internal view returns (uint256, uint256) {
         uint256 tokenPriceEth = _tokenPrice();
         uint256 wethPriceUsd = _wethPrice();
-        uint256 slpSupply = sushiLpToken.totalSupply();
-        (uint256 wethReserves, uint256 tokenReserves, ) = sushiLpToken.getReserves();
+        uint256 lpSupply = lpToken.totalSupply();
+        (uint256 wethReserves, uint256 tokenReserves, ) = lpToken.getReserves();
 
         // Convert reserves into current USD price
         uint256 tokenReservesUsd = ((tokenReserves * tokenPriceEth) * wethPriceUsd) / 1 ether;
         uint256 wethReservesUsd = wethReserves * wethPriceUsd;
 
-        // Get amounts in USD given the amount of SLP with slippage
-        uint256 amountTokenUsd = (((_slpAmount * tokenReservesUsd) / slpSupply) * (BPS - slippage)) / BPS;
-        uint256 amountWethUsd = (((_slpAmount * wethReservesUsd) / slpSupply) * (BPS - slippage)) / BPS;
+        // Get amounts in USD given the amount of LP with slippage
+        uint256 amountTokenUsd = (((_lpAmount * tokenReservesUsd) / lpSupply) * (BPS - slippage)) / BPS;
+        uint256 amountWethUsd = (((_lpAmount * wethReservesUsd) / lpSupply) * (BPS - slippage)) / BPS;
 
         // Return tokens denominated in ETH
         uint256 amountTokenMin = (amountTokenUsd * 1 ether) / (tokenPriceEth * wethPriceUsd);
@@ -153,7 +164,7 @@ contract BaseTest is DSTestPlus {
     }
 
     /**
-     * @notice Get the price of weth
+     * @notice Get the price of WETH
      * @dev Make sure price is not stale or incorrect
      * @return Return the correct price
      */
