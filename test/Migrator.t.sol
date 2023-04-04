@@ -19,18 +19,17 @@ contract MigratorTest is BaseTest {
         assertEq(auraPool.balanceOf(user), 0);
 
         // Off-chain parameters
-        IMigrator.MigrationAddresses memory migrationAddresses = getMigrationAddresses();
-        IMigrator.MigrationDetails memory migrationDetails = getMigrationDetails(_amount, true);
+        IMigrator.MigrationParams memory migrationParams = getMigrationParams(_amount, true);
 
         hevm.startPrank(user);
         lpToken.approve(address(migrator), _amount);
-        migrator.migrate(migrationAddresses, migrationDetails);
+        migrator.migrate(migrationParams);
         hevm.stopPrank();
 
         // User should only have auraBPT (auraBPT amount > original LP amount)
         assertEq(lpToken.balanceOf(user), 0);
         assertEq(balancerPoolToken.balanceOf(user), 0);
-        assertGt(auraPool.balanceOf(user), _amount);
+        assertGt(auraPool.balanceOf(user), migrationParams.amountAuraBptOut);
 
         // Migrator should have no funds
         assertEq(weth.balanceOf(address(migrator)), 0);
@@ -56,17 +55,16 @@ contract MigratorTest is BaseTest {
         assertEq(auraPool.balanceOf(user), 0);
 
         // Off-chain parameters
-        IMigrator.MigrationAddresses memory migrationAddresses = getMigrationAddresses();
-        IMigrator.MigrationDetails memory migrationDetails = getMigrationDetails(_amount, false);
+        IMigrator.MigrationParams memory migrationParams = getMigrationParams(_amount, false);
 
         hevm.startPrank(user);
         lpToken.approve(address(migrator), _amount);
-        migrator.migrate(migrationAddresses, migrationDetails);
+        migrator.migrate(migrationParams);
         hevm.stopPrank();
 
         // User should only have BPT (BPT amount > original LP amount)
         assertEq(lpToken.balanceOf(user), 0);
-        assertGt(balancerPoolToken.balanceOf(user), _amount);
+        assertGt(balancerPoolToken.balanceOf(user), migrationParams.amountBptOut);
         assertEq(auraPool.balanceOf(user), 0);
 
         // Migrator should have no funds

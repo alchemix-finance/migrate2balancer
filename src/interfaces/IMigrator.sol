@@ -3,27 +3,33 @@ pragma solidity ^0.8.15;
 
 interface IMigrator {
     /**
-     * @notice Represents the addresses required for migration
+     * @notice Represents the addresses, migration details, and calculations required for migration
      */
-    struct MigrationAddresses {
-        address token; // Token in the TOKEN/WETH LP position
-        address balancerPoolToken; // 80/20 TOKEN/WETH Balancer Pool Token
-        address lpToken; // UniV2 50/50 TOKEN/WETH LP Token
-        address auraPool; // ERC4626 Aura pool address
-        address router; // UniV2 Router for unwrapping the LP token
-        address balancerVault; // Balancer Vault for swapping WETH to TOKEN and joining the TOKEN/WETH 80/20 pool
-    }
-
-    /**
-     * @notice Represents the migration details and calculations
-     */
-    struct MigrationDetails {
-        bool stakeBpt; // Indicates whether to stake the migrated BPT in the Aura pool
-        uint256 amountTokenMin; // Minimum amount of Tokens to be received from the LP
-        uint256 amountWethMin; // Minimum amount of WETH to be received from the LP
-        uint256 wethRequired; // Amount of WETH required to create an 80/20 TOKEN/WETH balance
-        uint256 minAmountTokenOut; // Minimum amount of Tokens from swapping excess WETH due to the 80/20 TOKEN/WETH rebalance (amountWethMin is always > wethRequired)
-        uint256 amountBptOut; // Amount of BPT to be received given the rebalanced Token and WETH amounts
+    struct MigrationParams {
+        // 80/20 TOKEN/WETH Balancer Pool Token
+        address balancerPoolToken;
+        // UniV2 50/50 TOKEN/WETH LP Token
+        address lpToken;
+        // ERC4626 Aura pool address
+        address auraPool;
+        // UniV2 Router for unwrapping the LP token
+        address router;
+        // Indicates whether to stake the migrated BPT in the Aura pool
+        bool stakeBpt;
+        // Amount of LP tokens to be migrated
+        uint256 lpAmount;
+        // Minimum amount of Tokens to be received from the LP
+        uint256 amountTokenMin;
+        // Minimum amount of WETH to be received from the LP
+        uint256 amountWethMin;
+        // Amount of WETH required to create an 80/20 TOKEN/WETH balance
+        uint256 wethRequired;
+        // Minimum amount of Tokens from swapping excess WETH due to the 80/20 TOKEN/WETH rebalance (amountWethMin is always > wethRequired)
+        uint256 minAmountTokenOut;
+        // Amount of BPT to be received given the rebalanced Token and WETH amounts
+        uint256 amountBptOut;
+        // Amount of auraBPT to be received given the amount of BPT deposited
+        uint256 amountAuraBptOut;
     }
 
     /**
@@ -37,8 +43,7 @@ interface IMigrator {
 
     /**
      * @notice Migrate SLP position into BPT position
-     * @param _addresses Migration addresses struct
-     * @param _details Migration details struct
+     * @param _params Migration addresses, details, and calculations
      */
-    function migrate(MigrationAddresses memory _addresses, MigrationDetails memory _details) external;
+    function migrate(MigrationParams calldata _params) external;
 }

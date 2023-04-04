@@ -12,12 +12,10 @@ contract BaseTest is DSTestPlus {
     Migrator public migrator;
 
     // Migration Addresses
-    ERC20 public token = ERC20(0xdBdb4d16EdA451D0503b854CF79D55697F90c8DF);
     ERC20 public balancerPoolToken = ERC20(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
     IUniswapV2Pair public lpToken = IUniswapV2Pair(0xC3f279090a47e80990Fe3a9c30d24Cb117EF91a8);
     ERC20 public auraPool = ERC20(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
     address public router = address(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
-    IVault public balancerVault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
 
     // Test variables
     address public user;
@@ -26,7 +24,8 @@ contract BaseTest is DSTestPlus {
     uint256 public BPS = 10000;
     AggregatorV3Interface public wethPrice = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
     AggregatorV3Interface public tokenPrice = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
-    ERC20 public weth = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    ERC20 public weth = ERC20(lpToken.token0());
+    ERC20 public token = ERC20(lpToken.token1());
 
     function setUp() public {
         user = hevm.addr(userPrivateKey);
@@ -38,33 +37,10 @@ contract BaseTest is DSTestPlus {
         Helper functions (used for testing, should be done off-chain in UI)
     */
 
-    /**
-     * @notice All address that need to be passed in for migration
-     * @return Returns the MigrationAddresses struct
-     */
-    function getMigrationAddresses() public view returns (IMigrator.MigrationAddresses memory) {
-        IMigrator.MigrationAddresses memory migrationAddresses = IMigrator.MigrationAddresses(
-            address(token),
-            address(balancerPoolToken),
-            address(lpToken),
-            address(auraPool),
-            address(router),
-            address(balancerVault)
-        );
-
-        return migrationAddresses;
-    }
-
-    /**
-     * @notice Off-chain calculations
-     * @param _amount Amount of LP tokens
-     * @param _stakeBpt Indicates decision to stake in Aura pool
-     * @return Returns the MigrationDetails struct
-     */
-    function getMigrationDetails(
+    function getMigrationParams(
         uint256 _amount,
         bool _stakeBpt
-    ) public view returns (IMigrator.MigrationDetails memory) {
+    ) internal view returns (IMigrator.MigrationParams memory) {
         // Calculate min amount of Token and WETH from LP
         (uint256 amountTokenMin, uint256 amountWethMin) = _calculateLpAmounts(_amount);
         // Calculate amount of WETH given amount of Token to create 80/20 TOKEN/WETH balance
@@ -73,17 +49,25 @@ contract BaseTest is DSTestPlus {
         uint256 minAmountTokenOut = _calculateTokenAmountOut(amountWethMin - wethRequired);
         // Calculate amount of BPT out given Tokens and WETH (add original and predicted swapped amounts of token)
         uint256 amountBptOut = _calculateBptAmountOut(amountTokenMin + minAmountTokenOut, wethRequired);
+        // Calculate amount of auraBPT out given BPT
+        uint256 amountAuraBptOut = _calculateAuraBptAmountOut(amountBptOut);
 
-        IMigrator.MigrationDetails memory migrationDetails = IMigrator.MigrationDetails(
+        IMigrator.MigrationParams memory migrationParams = IMigrator.MigrationParams(
+            address(balancerPoolToken),
+            address(lpToken),
+            address(auraPool),
+            address(router),
             _stakeBpt,
+            _amount,
             amountTokenMin,
             amountWethMin,
             wethRequired,
             minAmountTokenOut,
-            amountBptOut
+            amountBptOut,
+            amountAuraBptOut
         );
 
-        return migrationDetails;
+        return migrationParams;
     }
 
     /**
@@ -141,6 +125,8 @@ contract BaseTest is DSTestPlus {
      */
     function _calculateBptAmountOut(uint256 _tokenAmountIn, uint256 _wethAmountIn) internal view returns (uint256) {
         bytes32 balancerPoolId = IBasePool(address(balancerPoolToken)).getPoolId();
+        IVault balancerVault = IBalancerPoolToken(address(balancerPoolToken)).getVault();
+
         (, uint256[] memory balances, ) = balancerVault.getPoolTokens(balancerPoolId);
         uint256[] memory normalizedWeights = IManagedPool(address(balancerPoolToken)).getNormalizedWeights();
 
@@ -157,6 +143,12 @@ contract BaseTest is DSTestPlus {
                 IBasePool(address(balancerPoolToken)).getSwapFeePercentage()
             )
         );
+
+        return amountOut;
+    }
+
+    function _calculateAuraBptAmountOut(uint256 _bptAmountIn) internal view returns (uint256) {
+        uint256 amountOut = IRewardPool4626(address(auraPool)).previewDeposit(_bptAmountIn);
 
         return amountOut;
     }

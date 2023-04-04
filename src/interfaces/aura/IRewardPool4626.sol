@@ -11,4 +11,6 @@ interface IRewardPool4626 {
     function balanceOf(address account) external view returns (uint256);
 
     function processIdleRewards() external;
+
+    function previewDeposit(uint256 assets) external view returns (uint256);
 }
