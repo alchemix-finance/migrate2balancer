@@ -115,12 +115,9 @@ contract Migrator is IMigrator {
         if (_params.stakeBpt) {
             require(_params.balancerPoolToken == IRewardPool4626(_params.auraPool).asset(), "Invalid Aura pool");
 
-            IRewardPool4626(_params.auraPool).deposit(amountReceived, address(msg.sender));
+            uint256 auraShares = IRewardPool4626(_params.auraPool).deposit(amountReceived, address(msg.sender));
 
-            require(
-                ERC20(_params.auraPool).balanceOf(address(msg.sender)) >= _params.amountAuraBptOut,
-                "Invalid auraBpt amount out"
-            );
+            require(auraShares >= _params.amountAuraBptOut, "Invalid auraBpt amount out");
         } else {
             ERC20(_params.balancerPoolToken).safeTransferFrom(address(this), msg.sender, amountReceived);
         }
