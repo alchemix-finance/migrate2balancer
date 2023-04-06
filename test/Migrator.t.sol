@@ -29,7 +29,7 @@ contract MigratorTest is BaseTest {
         // User should only have auraBPT (auraBPT amount > original LP amount)
         assertEq(lpToken.balanceOf(user), 0);
         assertEq(balancerPoolToken.balanceOf(user), 0);
-        assertGt(auraPool.balanceOf(user), migrationParams.amountAuraBptOut);
+        assertGt(auraPool.balanceOf(user), migrationParams.amountAuraSharesMinimum);
 
         // Migrator should have no funds
         assertEq(weth.balanceOf(address(migrator)), 0);
@@ -64,7 +64,7 @@ contract MigratorTest is BaseTest {
 
         // User should only have BPT (BPT amount > original LP amount)
         assertEq(lpToken.balanceOf(user), 0);
-        assertGt(balancerPoolToken.balanceOf(user), migrationParams.amountBptOut);
+        assertGt(balancerPoolToken.balanceOf(user), migrationParams.amountBalancerLiquidityOut);
         assertEq(auraPool.balanceOf(user), 0);
 
         // Migrator should have no funds

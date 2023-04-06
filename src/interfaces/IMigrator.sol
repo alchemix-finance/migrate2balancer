@@ -1,35 +1,42 @@
 // SPDX-License-Identifier: GPL-3
 pragma solidity ^0.8.15;
 
+import "solmate/src/tokens/ERC20.sol";
+
+import "src/interfaces/aura/IRewardPool4626.sol";
+import "src/interfaces/balancer/IBasePool.sol";
+import "src/interfaces/sushi/IUniswapV2Pair.sol";
+import "src/interfaces/sushi/IUniswapV2Router02.sol";
+
 interface IMigrator {
     /**
      * @notice Represents the addresses, migration details, and calculations required for migration
      */
     struct MigrationParams {
         // 80/20 TOKEN/WETH Balancer Pool Token
-        address balancerPoolToken;
+        IBasePool balancerPoolToken;
         // UniV2 50/50 TOKEN/WETH LP Token
-        address lpToken;
+        IUniswapV2Pair uniswapPoolToken;
         // ERC4626 Aura pool address
-        address auraPool;
+        IRewardPool4626 auraPool;
         // UniV2 Router for unwrapping the LP token
-        address router;
-        // Indicates whether to stake the migrated BPT in the Aura pool
-        bool stakeBpt;
+        IUniswapV2Router02 router;
         // Amount of LP tokens to be migrated
-        uint256 lpAmount;
+        uint256 uniswapPoolTokensIn;
         // Minimum amount of Tokens to be received from the LP
-        uint256 amountTokenMin;
+        uint256 amountCompanionMinimumOut;
         // Minimum amount of WETH to be received from the LP
-        uint256 amountWethMin;
+        uint256 amountWETHMinimumOut;
         // Amount of WETH required to create an 80/20 TOKEN/WETH balance
         uint256 wethRequired;
         // Minimum amount of Tokens from swapping excess WETH due to the 80/20 TOKEN/WETH rebalance (amountWethMin is always > wethRequired)
         uint256 minAmountTokenOut;
         // Amount of BPT to be received given the rebalanced Token and WETH amounts
-        uint256 amountBptOut;
+        uint256 amountBalancerLiquidityOut;
         // Amount of auraBPT to be received given the amount of BPT deposited
-        uint256 amountAuraBptOut;
+        uint256 amountAuraSharesMinimum;
+        // Indicates whether to stake the migrated BPT in the Aura pool
+        bool stake;
     }
 
     /**
@@ -43,7 +50,7 @@ interface IMigrator {
 
     /**
      * @notice Migrate SLP position into BPT position
-     * @param _params Migration addresses, details, and calculations
+     * @param params Migration addresses, details, and calculations
      */
-    function migrate(MigrationParams calldata _params) external;
+    function migrate(MigrationParams calldata params) external;
 }

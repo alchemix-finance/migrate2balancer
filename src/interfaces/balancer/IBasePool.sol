@@ -15,15 +15,16 @@
 pragma solidity >=0.7.0 <0.9.0;
 pragma experimental ABIEncoderV2;
 
-import "./IVault.sol";
+import "./IBalancerPoolToken.sol";
 import "./IPoolSwapStructs.sol";
+import "./IVault.sol";
 
 /**
  * @dev Interface for adding and removing liquidity that all Pool contracts should implement. Note that this is not
  * the complete Pool contract interface, as it is missing the swap hooks. Pool contracts should also inherit from
  * either IGeneralPool or IMinimalSwapInfoPool
  */
-interface IBasePool is IPoolSwapStructs {
+interface IBasePool is IPoolSwapStructs, IBalancerPoolToken {
     /**
      * @dev Called by the Vault when a user calls `IVault.joinPool` to add liquidity to this Pool. Returns how many of
      * each registered token the user should provide, as well as the amount of protocol fees the Pool owes to the Vault.

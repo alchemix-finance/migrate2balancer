@@ -1,21 +1,28 @@
 // SPDX-License-Identifier: GPL-3
 pragma solidity ^0.8.15;
 
+import "solmate/src/tokens/ERC20.sol";
+
+import "src/interfaces/aura/IRewardPool4626.sol";
+import "src/interfaces/balancer/IBasePool.sol";
+import "src/interfaces/sushi/IUniswapV2Router02.sol";
+
+import "solmate/src/tokens/ERC20.sol";
 import "lib/forge-std/src/console2.sol";
 import "./utils/DSTestPlus.sol";
 import "src/Migrator.sol";
 import "src/interfaces/balancer/IManagedPool.sol";
 import "src/interfaces/balancer/WeightedMath.sol";
 import "src/interfaces/chainlink/AggregatorV3Interface.sol";
+import "src/interfaces/sushi/IUniswapV2Pair.sol";
 
 contract BaseTest is DSTestPlus {
     Migrator public migrator;
 
-    // Migration Addresses
-    ERC20 public balancerPoolToken = ERC20(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
+    IBasePool public balancerPoolToken = IBasePool(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
     IUniswapV2Pair public lpToken = IUniswapV2Pair(0xC3f279090a47e80990Fe3a9c30d24Cb117EF91a8);
-    ERC20 public auraPool = ERC20(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
-    address public router = address(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
+    IRewardPool4626 public auraPool =  IRewardPool4626(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
+    IUniswapV2Router02 public router = IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
 
     // Test variables
     address public user;
@@ -53,18 +60,18 @@ contract BaseTest is DSTestPlus {
         uint256 amountAuraBptOut = _calculateAuraBptAmountOut(amountBptOut);
 
         IMigrator.MigrationParams memory migrationParams = IMigrator.MigrationParams(
-            address(balancerPoolToken),
-            address(lpToken),
-            address(auraPool),
-            address(router),
-            _stakeBpt,
+            balancerPoolToken,
+            lpToken,
+            auraPool,
+            router,
             _amount,
             amountTokenMin,
             amountWethMin,
             wethRequired,
             minAmountTokenOut,
             amountBptOut,
-            amountAuraBptOut
+            amountAuraBptOut,
+            _stakeBpt
         );
 
         return migrationParams;
