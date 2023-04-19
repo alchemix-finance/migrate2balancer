@@ -1,12 +1,19 @@
 // SPDX-License-Identifier: GPL-3
 pragma solidity ^0.8.15;
 
+import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "solmate/src/tokens/ERC20.sol";
+import "solmate/src/tokens/WETH.sol";
+import "solmate/src/utils/SafeTransferLib.sol";
 
-import "src/interfaces/aura/IRewardPool4626.sol";
+import "src/interfaces/balancer/IVault.sol";
+import "src/interfaces/balancer/WeightedPoolUserData.sol";
+import "src/interfaces/balancer/IAsset.sol";
+import "src/interfaces/balancer/IBalancerPoolToken.sol";
 import "src/interfaces/balancer/IBasePool.sol";
-import "src/interfaces/sushi/IUniswapV2Pair.sol";
-import "src/interfaces/sushi/IUniswapV2Router02.sol";
+import "src/interfaces/aura/IRewardPool4626.sol";
+import "src/interfaces/univ2/IUniswapV2Pair.sol";
+import "src/interfaces/univ2/IUniswapV2Router02.sol";
 
 interface IMigrator {
     /**
@@ -40,16 +47,16 @@ interface IMigrator {
     }
 
     /**
-     * @notice Emitted when an account migrates from SLP to BPT or auraBPT
+     * @notice Emitted when an account migrates from UniV2 LP to BPT or auraBPT
      * @param account The account migrating
      * @param lpAmountMigrated Amount of LP tokens migrated
-     * @param amountReceived The amount of BPT or auraBPT received
-     * @param staked Indicates if the account received auraBPT
+     * @param amountReceived The amount of BPT received
+     * @param staked Indicates if the account is staking BPT in the Aura pool
      */
     event Migrated(address indexed account, uint256 lpAmountMigrated, uint256 amountReceived, bool staked);
 
     /**
-     * @notice Migrate SLP position into BPT position
+     * @notice Migrate UniV2 LP position into BPT position
      * @param params Migration addresses, details, and calculations
      */
     function migrate(MigrationParams calldata params) external;

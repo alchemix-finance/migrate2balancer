@@ -1,27 +1,25 @@
 // SPDX-License-Identifier: GPL-3
 pragma solidity ^0.8.15;
 
-import "solmate/src/tokens/ERC20.sol";
-
-import "src/interfaces/aura/IRewardPool4626.sol";
-import "src/interfaces/balancer/IBasePool.sol";
-import "src/interfaces/sushi/IUniswapV2Router02.sol";
-
-import "solmate/src/tokens/ERC20.sol";
-import "lib/forge-std/src/console2.sol";
 import "./utils/DSTestPlus.sol";
+import "lib/forge-std/src/console2.sol";
+
 import "src/Migrator.sol";
+
 import "src/interfaces/balancer/IManagedPool.sol";
 import "src/interfaces/balancer/WeightedMath.sol";
 import "src/interfaces/chainlink/AggregatorV3Interface.sol";
-import "src/interfaces/sushi/IUniswapV2Pair.sol";
 
 contract BaseTest is DSTestPlus {
     Migrator public migrator;
 
-    IBasePool public balancerPoolToken = IBasePool(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
+    // UniV2 LP to migrate from
     IUniswapV2Pair public lpToken = IUniswapV2Pair(0xC3f279090a47e80990Fe3a9c30d24Cb117EF91a8);
-    IRewardPool4626 public auraPool =  IRewardPool4626(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
+    // Balancer pool to migrate to
+    IBasePool public balancerPoolToken = IBasePool(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
+    // Aura pool to stake BPT in
+    IRewardPool4626 public auraPool = IRewardPool4626(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
+    // UniV2 router
     IUniswapV2Router02 public router = IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
 
     // Test variables
@@ -29,21 +27,29 @@ contract BaseTest is DSTestPlus {
     uint256 public userPrivateKey = 0xBEEF;
     uint256 public slippage = 10;
     uint256 public BPS = 10000;
+    ERC20 public companionToken;
+    ERC20 public weth = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     AggregatorV3Interface public wethPrice = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
     AggregatorV3Interface public tokenPrice = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
-    ERC20 public weth = ERC20(lpToken.token0());
-    ERC20 public token = ERC20(lpToken.token1());
 
     function setUp() public {
         user = hevm.addr(userPrivateKey);
+
+        // Set the companion token given any LP token
+        companionToken = lpToken.token0() == address(weth) ? ERC20(lpToken.token1()) : ERC20(lpToken.token0());
 
         migrator = new Migrator();
     }
 
     /*
-        Helper functions (used for testing, should be done off-chain in UI)
+        Helper functions used for testing, these should be done off-chain in production
     */
 
+    /**
+     * @notice Get the parameters required for the migration
+     * @param _amount amount of LP tokens to migrate
+     * @param _stakeBpt whether to stake the BPT in the Aura pool
+     */
     function getMigrationParams(
         uint256 _amount,
         bool _stakeBpt
@@ -54,25 +60,25 @@ contract BaseTest is DSTestPlus {
         uint256 wethRequired = _calculateWethRequired(amountTokenMin);
         // Calculate amount of Tokens out given the excess amount of WETH due to 80/20 TOKEN/WETH rebalance (amountWethMin is always > wethRequired)
         uint256 minAmountTokenOut = _calculateTokenAmountOut(amountWethMin - wethRequired);
-        // Calculate amount of BPT out given Tokens and WETH (add original and predicted swapped amounts of token)
+        // Calculate amount of BPT out given Tokens and WETH (add original and predicted swapped amounts of companion token)
         uint256 amountBptOut = _calculateBptAmountOut(amountTokenMin + minAmountTokenOut, wethRequired);
         // Calculate amount of auraBPT out given BPT
         uint256 amountAuraBptOut = _calculateAuraBptAmountOut(amountBptOut);
 
-        IMigrator.MigrationParams memory migrationParams = IMigrator.MigrationParams(
-            balancerPoolToken,
-            lpToken,
-            auraPool,
-            router,
-            _amount,
-            amountTokenMin,
-            amountWethMin,
-            wethRequired,
-            minAmountTokenOut,
-            amountBptOut,
-            amountAuraBptOut,
-            _stakeBpt
-        );
+        IMigrator.MigrationParams memory migrationParams = IMigrator.MigrationParams({
+            balancerPoolToken:          balancerPoolToken,
+            uniswapPoolToken:           lpToken,
+            auraPool:                   auraPool,
+            router:                     router,
+            uniswapPoolTokensIn:        _amount,
+            amountCompanionMinimumOut:  amountTokenMin,
+            amountWETHMinimumOut:       amountWethMin,
+            wethRequired:               wethRequired,
+            minAmountTokenOut:          minAmountTokenOut,
+            amountBalancerLiquidityOut: amountBptOut,
+            amountAuraSharesMinimum:    amountAuraBptOut,
+            stake:                      _stakeBpt
+        });         
 
         return migrationParams;
     }
@@ -105,7 +111,7 @@ contract BaseTest is DSTestPlus {
     }
 
     /**
-     * @notice Given an amount of a token, calculate the amount of WETH to create an 80/20 TOKEN/WETH ratio
+     * @notice Given an amount of a companion token, calculate the amount of WETH to create an 80/20 TOKEN/WETH ratio
      * @param _tokenAmount Amount of Token
      */
     function _calculateWethRequired(uint256 _tokenAmount) internal view returns (uint256) {
@@ -154,6 +160,10 @@ contract BaseTest is DSTestPlus {
         return amountOut;
     }
 
+    /**
+     * @notice Given an amount of BPT in, calculate the expected auraBPT out
+     * @param _bptAmountIn Amount of BPT
+     */
     function _calculateAuraBptAmountOut(uint256 _bptAmountIn) internal view returns (uint256) {
         uint256 amountOut = IRewardPool4626(address(auraPool)).previewDeposit(_bptAmountIn);
 
@@ -176,7 +186,7 @@ contract BaseTest is DSTestPlus {
     }
 
     /**
-     * @notice Get the price of a token
+     * @notice Get the price of a companion token
      * @dev Make sure price is not stale or incorrect
      * @return Return the correct price
      */

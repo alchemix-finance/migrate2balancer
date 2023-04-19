@@ -6,7 +6,7 @@ import "./BaseTest.sol";
 contract MigratorTest is BaseTest {
     // Test migrating from LP to auraBPT
     function test_migrateToAuraBpt(uint256 _amount) external {
-        // Set range to be less than 10% of LP supply
+        // Set amount migrating to be less than 10% of LP supply
         uint256 lpSupply = lpToken.totalSupply();
         hevm.assume(_amount <= ((lpSupply * 1000) / BPS) && _amount > 1 ether);
 
@@ -21,6 +21,7 @@ contract MigratorTest is BaseTest {
         // Off-chain parameters
         IMigrator.MigrationParams memory migrationParams = getMigrationParams(_amount, true);
 
+        // Migrate
         hevm.startPrank(user);
         lpToken.approve(address(migrator), _amount);
         migrator.migrate(migrationParams);
@@ -33,7 +34,7 @@ contract MigratorTest is BaseTest {
 
         // Migrator should have no funds
         assertEq(weth.balanceOf(address(migrator)), 0);
-        assertEq(token.balanceOf(address(migrator)), 0);
+        assertEq(companionToken.balanceOf(address(migrator)), 0);
         assertEq(balancerPoolToken.balanceOf(address(migrator)), 0);
         assertEq(auraPool.balanceOf(address(migrator)), 0);
         assertEq(lpToken.balanceOf(address(migrator)), 0);
@@ -42,7 +43,7 @@ contract MigratorTest is BaseTest {
 
     // Test migrating from LP to BPT
     function test_migrateToBpt(uint256 _amount) external {
-        // Set range to be less than 10% of LP supply
+        // Set amount migrating to be less than 10% of LP supply
         uint256 lpSupply = lpToken.totalSupply();
         hevm.assume(_amount <= ((lpSupply * 1000) / BPS) && _amount > 1 ether);
 
@@ -57,6 +58,7 @@ contract MigratorTest is BaseTest {
         // Off-chain parameters
         IMigrator.MigrationParams memory migrationParams = getMigrationParams(_amount, false);
 
+        // Migrate
         hevm.startPrank(user);
         lpToken.approve(address(migrator), _amount);
         migrator.migrate(migrationParams);
@@ -69,7 +71,7 @@ contract MigratorTest is BaseTest {
 
         // Migrator should have no funds
         assertEq(weth.balanceOf(address(migrator)), 0);
-        assertEq(token.balanceOf(address(migrator)), 0);
+        assertEq(companionToken.balanceOf(address(migrator)), 0);
         assertEq(balancerPoolToken.balanceOf(address(migrator)), 0);
         assertEq(auraPool.balanceOf(address(migrator)), 0);
         assertEq(lpToken.balanceOf(address(migrator)), 0);

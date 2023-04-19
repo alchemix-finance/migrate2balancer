@@ -1,17 +1,7 @@
 // SPDX-License-Identifier: GPL-3
 pragma solidity ^0.8.15;
 
-import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import "solmate/src/tokens/ERC20.sol";
-import "solmate/src/tokens/WETH.sol";
-import "solmate/src/utils/SafeTransferLib.sol";
-
 import "src/interfaces/IMigrator.sol";
-import "src/interfaces/balancer/IVault.sol";
-import "src/interfaces/balancer/WeightedPoolUserData.sol";
-import "src/interfaces/balancer/IBasePool.sol";
-import "src/interfaces/balancer/IAsset.sol";
-import "src/interfaces/balancer/IBalancerPoolToken.sol";
 
 /**
  * @title UniV2 LP to Balancer LP migrator
@@ -37,10 +27,9 @@ contract Migrator is IMigrator {
         // Preemptively transfer the Uniswap pool tokens to this contract before we conduct any mutations
         ERC20(address(params.uniswapPoolToken)).safeTransferFrom(msg.sender, address(this), params.uniswapPoolTokensIn);
 
-        IVault vault = params.balancerPoolToken.getVault();
+        IVault vault = IBalancerPoolToken(address(params.balancerPoolToken)).getVault();
 
-        // Grab the tokens in the balancer vault. It is expected that the vault only has two tokens. If the vault
-        // has more than two tokens, then the migration will fail.
+        // Grab the two tokens in the balancer vault. If the vault has more than two tokens, the migration will fail.
         bytes32 poolId = params.balancerPoolToken.getPoolId();
         (IERC20[] memory tokens, /* uint256[] memory balances */, /* uint256 lastChangeBlock */) = vault.getPoolTokens(poolId);
         require(tokens.length == 2, "Invalid pool tokens length");
@@ -48,6 +37,7 @@ contract Migrator is IMigrator {
         // Find which token is not WETH, that is the companion token.
         IERC20 companionToken = tokens[1] == IERC20(address(weth)) ? tokens[0] : tokens[1];
 
+        // Check if the Uniswap pool token has been approved for the Uniswap router
         if (params.uniswapPoolToken.allowance(address(this), address(params.router)) < params.uniswapPoolTokensIn) {
             ERC20(address(params.uniswapPoolToken)).safeApprove(address(params.router), type(uint256).max);
         }
@@ -65,13 +55,14 @@ contract Migrator is IMigrator {
 
         require(weth.balanceOf(address(this)) > params.wethRequired, "Contract doesn't have enough weth");
 
-        // [IMPORTANT]: APPROVAL NEEDED / WETH
+        // Approve the balancer vault to swap and deposit WETH
+        ERC20(address(weth)).safeApprove(address(vault), type(uint256).max);
 
         vault.swap({
-            singleSwap: IVault.SingleSwap({
+            singleSwap:  IVault.SingleSwap({
                 poolId: poolId,
                 kind: IVault.SwapKind.GIVEN_IN,
-                assetIn: IAsset(address(weth)),
+                assetIn:  IAsset(address(weth)),
                 assetOut: IAsset(address(companionToken)),
                 amount: weth.balanceOf(address(this)) - params.wethRequired,
                 userData: bytes("")
@@ -99,7 +90,10 @@ contract Migrator is IMigrator {
             maximumAmountsIn[1] = weth.balanceOf(address(this));
         }
 
-        // [IMPORTANT]: APPROVAL NEEDED / WETH + Companion
+        // Check if the balancer vault has been approved to spend the companion token
+        if (ERC20(address(companionToken)).allowance(address(this), address(vault)) < companionToken.balanceOf(address(this))) {
+            ERC20(address(companionToken)).safeApprove(address(vault), companionToken.balanceOf(address(this)));
+        }
 
         vault.joinPool({
             poolId: poolId,
@@ -117,16 +111,20 @@ contract Migrator is IMigrator {
             })
         });
 
+        // Get the amount of BPT received since joinPool does not return the amount
         uint256 poolTokensReceived = params.balancerPoolToken.balanceOf(address(this));
 
+        // If the user is staking, we deposit BPT into the Aura pool on the user's behalf
+        // Otherwise, we transfer the BPT to the user
         if (params.stake) {
-            // [IMPORTANT]: APPROVAL NEEDED / BPT
+            ERC20(address(params.balancerPoolToken)).safeApprove(address(params.auraPool), poolTokensReceived);
             uint256 shares = params.auraPool.deposit(poolTokensReceived, msg.sender);
             require(shares >= params.amountAuraSharesMinimum, "Invalid auraBpt amount out");
         } else {
             ERC20(address(params.balancerPoolToken)).safeTransfer(msg.sender, poolTokensReceived);
         }
 
+        // Indiate who migrated, amount of UniV2 LP tokens in, amount of BPT out, and whether the user is staking
         emit Migrated(msg.sender, params.uniswapPoolTokensIn, poolTokensReceived, params.stake);
     }
 }
