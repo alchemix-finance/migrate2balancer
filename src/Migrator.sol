@@ -14,11 +14,16 @@ contract Migrator is IMigrator {
     using SafeTransferLib for ERC20;
 
     WETH public immutable weth = WETH(payable(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2));
-
+    IUniswapV2Router02 public sushiRouter = IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
+    IUniswapV2Router02 public uniswapRouter = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+    
     /**
      * @inheritdoc IMigrator
      */
     function migrate(MigrationParams calldata params) external {
+        // Validate the router being used
+        require(params.router == sushiRouter || params.router == uniswapRouter, "Invalid router");
+        
         // If the user is staking, then the Aura pool asset must be the same as the Balancer pool token
         if (params.stake) {
             require(address(params.balancerPoolToken) == params.auraPool.asset(), "Invalid Aura pool");
@@ -31,11 +36,21 @@ contract Migrator is IMigrator {
 
         // Grab the two tokens in the balancer vault. If the vault has more than two tokens, the migration will fail.
         bytes32 poolId = params.balancerPoolToken.getPoolId();
-        (IERC20[] memory tokens, /* uint256[] memory balances */, /* uint256 lastChangeBlock */) = vault.getPoolTokens(poolId);
-        require(tokens.length == 2, "Invalid pool tokens length");
+        (IERC20[] memory balancerPoolTokens, /* uint256[] memory balances */, /* uint256 lastChangeBlock */) = vault.getPoolTokens(poolId);
+        require(balancerPoolTokens.length == 2, "Invalid balancer pool tokens length");
+        
+        // Require the Uniswap pool tokens to be the same as the Balancer pool tokens (order agnostic)
+        require(
+            (params.uniswapPoolToken.token0() == address(balancerPoolTokens[0]) && 
+             params.uniswapPoolToken.token1() == address(balancerPoolTokens[1])) 
+            || 
+            (params.uniswapPoolToken.token0() == address(balancerPoolTokens[1]) && 
+             params.uniswapPoolToken.token1() == address(balancerPoolTokens[0])),
+            "LP token pairs do not match"
+        );
 
         // Find which token is not WETH, that is the companion token.
-        IERC20 companionToken = tokens[1] == IERC20(address(weth)) ? tokens[0] : tokens[1];
+        IERC20 companionToken = balancerPoolTokens[1] == IERC20(address(weth)) ? balancerPoolTokens[0] : balancerPoolTokens[1];
 
         // Check if the Uniswap pool token has been approved for the Uniswap router
         if (params.uniswapPoolToken.allowance(address(this), address(params.router)) < params.uniswapPoolTokensIn) {
@@ -78,11 +93,11 @@ contract Migrator is IMigrator {
         });
 
         IAsset[] memory assets = new IAsset[](2);
-        assets[0] = IAsset(address(tokens[0]));
-        assets[1] = IAsset(address(tokens[1]));
+        assets[0] = IAsset(address(balancerPoolTokens[0]));
+        assets[1] = IAsset(address(balancerPoolTokens[1]));
 
         uint256[] memory maximumAmountsIn = new uint256[](2);
-        if (tokens[0] == IERC20(address(weth))) {
+        if (balancerPoolTokens[0] == IERC20(address(weth))) {
             maximumAmountsIn[0] = weth.balanceOf(address(this));
             maximumAmountsIn[1] = companionToken.balanceOf(address(this));
         } else {
