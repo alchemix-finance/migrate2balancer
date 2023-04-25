@@ -98,5 +98,5 @@ DEPLOY_GOERLI=--rpc-url $(TESTNET_RPC) $(KEY) $(VERIFY) src/$(FILE).sol:$(FILE)
 # Deploy a contract to mainnet (assumes file and contract name match) "make deploy_mainnet FILE=<filename> ARGS=<constructor args>
 deploy_mainnet :; forge create $(DEPLOY_MAINNET)
 
-# Deploy a contract to goerli "make deploy_goerli FILE=<filename>"
+# Deploy a contract to goerli "make deploy_goerli FILE=<filename>" (assumes file and contract name match)
 deploy_goerli :; forge create $(DEPLOY_GOERLI)

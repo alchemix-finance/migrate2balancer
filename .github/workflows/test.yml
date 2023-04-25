@@ -22,14 +22,13 @@ jobs:
             - name: Install submodules
               run: git submodule update --init --recursive
 
-            - name: Run Forge build
-              run: |
-                  forge --version
-                  forge build --sizes
-              id: build
+            - name: Install dependencies
+              run: forge install
+
+            - run: chmod 755 ./test.sh
 
             - name: Run tests and coverage
               env:
                   ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
                   TEST_PROFILE: default
-                  run: ./test.sh
+              run: ./test.sh
