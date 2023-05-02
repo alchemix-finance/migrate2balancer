@@ -13,16 +13,12 @@ import "src/interfaces/chainlink/AggregatorV3Interface.sol";
 contract BaseTest is DSTestPlus {
     Migrator public migrator;
 
-    // UniV2 LP to migrate from
+    // Sushi LP to migrate from
     IUniswapV2Pair public lpToken = IUniswapV2Pair(0xC3f279090a47e80990Fe3a9c30d24Cb117EF91a8);
     // Balancer pool to migrate to
     IBasePool public balancerPoolToken = IBasePool(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
     // Aura pool to stake BPT in
     IRewardPool4626 public auraPool = IRewardPool4626(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
-    // UniV2 sushi router
-    IUniswapV2Router02 public sushiRouter = IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
-    // UniV2 uniswap router
-    IUniswapV2Router02 public uniswapRouter = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
 
     // Test variables
     address public user;
@@ -69,10 +65,9 @@ contract BaseTest is DSTestPlus {
 
         IMigrator.MigrationParams memory migrationParams = IMigrator.MigrationParams({
             balancerPoolToken: balancerPoolToken,
-            uniswapPoolToken: lpToken,
+            sushiPoolToken: lpToken,
             auraPool: auraPool,
-            router: sushiRouter,
-            uniswapPoolTokensIn: _amount,
+            sushiPoolTokensIn: _amount,
             amountCompanionMinimumOut: amountTokenMin,
             amountWETHMinimumOut: amountWethMin,
             wethRequired: wethRequired,

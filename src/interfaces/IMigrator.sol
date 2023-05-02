@@ -14,6 +14,7 @@ import "src/interfaces/balancer/IBasePool.sol";
 import "src/interfaces/aura/IRewardPool4626.sol";
 import "src/interfaces/univ2/IUniswapV2Pair.sol";
 import "src/interfaces/univ2/IUniswapV2Router02.sol";
+import "src/interfaces/univ2/IUniswapV2Factory.sol";
 
 interface IMigrator {
     /**
@@ -23,13 +24,11 @@ interface IMigrator {
         // 80/20 TOKEN/WETH Balancer Pool Token
         IBasePool balancerPoolToken;
         // UniV2 50/50 TOKEN/WETH LP Token
-        IUniswapV2Pair uniswapPoolToken;
+        IUniswapV2Pair sushiPoolToken;
         // ERC4626 Aura pool address
         IRewardPool4626 auraPool;
-        // UniV2 Router for unwrapping the LP token
-        IUniswapV2Router02 router;
         // Amount of LP tokens to be migrated
-        uint256 uniswapPoolTokensIn;
+        uint256 sushiPoolTokensIn;
         // Minimum amount of Tokens to be received from the LP
         uint256 amountCompanionMinimumOut;
         // Minimum amount of WETH to be received from the LP
