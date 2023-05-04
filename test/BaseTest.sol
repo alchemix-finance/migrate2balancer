@@ -30,7 +30,7 @@ contract BaseTest is DSTestPlus {
     AggregatorV3Interface public wethPrice = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
     AggregatorV3Interface public tokenPrice = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
     address public balancerVault = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
-    address public sushiRouter = 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F;
+    address public router = 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F;
 
     function setUp() public {
         user = hevm.addr(userPrivateKey);
@@ -38,7 +38,7 @@ contract BaseTest is DSTestPlus {
         // Set the companion token given any LP token
         companionToken = lpToken.token0() == address(weth) ? ERC20(lpToken.token1()) : ERC20(lpToken.token0());
 
-        migrator = new Migrator(address(weth), balancerVault, sushiRouter);
+        migrator = new Migrator(address(weth), balancerVault, router);
     }
 
     /*

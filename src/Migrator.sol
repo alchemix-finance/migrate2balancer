@@ -15,12 +15,12 @@ contract Migrator is IMigrator {
 
     WETH public immutable weth;
     IVault public immutable balancerVault;
-    IUniswapV2Router02 public immutable sushiRouter;
+    IUniswapV2Router02 public immutable router;
 
-    constructor(address wethAddress, address balancerVaultAddress, address sushiRouterAddress) {
+    constructor(address wethAddress, address balancerVaultAddress, address routerAddress) {
         weth = WETH(payable(wethAddress));
         balancerVault = IVault(balancerVaultAddress);
-        sushiRouter = IUniswapV2Router02(sushiRouterAddress);
+        router = IUniswapV2Router02(routerAddress);
     }
     
     /**
@@ -56,12 +56,12 @@ contract Migrator is IMigrator {
         IERC20 companionToken = balancerPoolTokens[1] == IERC20(address(weth)) ? balancerPoolTokens[0] : balancerPoolTokens[1];
 
         // Check if the pool token has been approved for the Sushiswap router
-        if (params.sushiPoolToken.allowance(address(this), address(sushiRouter)) < params.sushiPoolTokensIn) {
-            ERC20(address(params.sushiPoolToken)).safeApprove(address(sushiRouter), type(uint256).max);
+        if (params.sushiPoolToken.allowance(address(this), address(router)) < params.sushiPoolTokensIn) {
+            ERC20(address(params.sushiPoolToken)).safeApprove(address(router), type(uint256).max);
         }
 
         // The ordering of `tokenA` and `tokenB` is handled upstream by the Sushiswap router
-        sushiRouter.removeLiquidity({
+        router.removeLiquidity({
             tokenA:     address(companionToken),
             tokenB:     address(weth),
             liquidity:  params.sushiPoolTokensIn,
@@ -149,7 +149,7 @@ contract Migrator is IMigrator {
     // Validate the sushi pool address
     function validatePairAddress(IUniswapV2Pair sushiPoolToken) internal view {
         // Get sushi factory
-        IUniswapV2Factory sushiFactory = IUniswapV2Factory(sushiRouter.factory());
+        IUniswapV2Factory sushiFactory = IUniswapV2Factory(router.factory());
         
         // Get the tokens in the pool
         address tokenA = sushiPoolToken.token0();
@@ -163,7 +163,7 @@ contract Migrator is IMigrator {
         // Get the expected pool address
         address expectedPoolAddress = address(uint160(uint256(keccak256(abi.encodePacked(
             hex'ff',
-            address(IUniswapV2Factory(sushiRouter.factory())),
+            address(IUniswapV2Factory(router.factory())),
             keccak256(abi.encodePacked(tokenA, tokenB)),
             // Init hash for the SushiSwap factory
             hex'e18a34eb0e04b04f7a0ac29a6e80748dca96319b42c54d679cb821dca90c6303' 
