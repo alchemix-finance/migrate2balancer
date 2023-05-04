@@ -29,6 +29,8 @@ contract BaseTest is DSTestPlus {
     ERC20 public weth = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     AggregatorV3Interface public wethPrice = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
     AggregatorV3Interface public tokenPrice = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
+    address public balancerVault = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
+    address public sushiRouter = 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F;
 
     function setUp() public {
         user = hevm.addr(userPrivateKey);
@@ -36,7 +38,7 @@ contract BaseTest is DSTestPlus {
         // Set the companion token given any LP token
         companionToken = lpToken.token0() == address(weth) ? ERC20(lpToken.token1()) : ERC20(lpToken.token0());
 
-        migrator = new Migrator();
+        migrator = new Migrator(address(weth), balancerVault, sushiRouter);
     }
 
     /*
@@ -135,9 +137,8 @@ contract BaseTest is DSTestPlus {
      */
     function _calculateBptAmountOut(uint256 _tokenAmountIn, uint256 _wethAmountIn) internal view returns (uint256) {
         bytes32 balancerPoolId = IBasePool(address(balancerPoolToken)).getPoolId();
-        IVault balancerVault = IBalancerPoolToken(address(balancerPoolToken)).getVault();
 
-        (, uint256[] memory balances, ) = balancerVault.getPoolTokens(balancerPoolId);
+        (, uint256[] memory balances, ) = IVault(balancerVault).getPoolTokens(balancerPoolId);
         uint256[] memory normalizedWeights = IManagedPool(address(balancerPoolToken)).getNormalizedWeights();
 
         uint256[] memory amountsIn = new uint256[](2);

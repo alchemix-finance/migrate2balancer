@@ -13,9 +13,15 @@ import "src/interfaces/IMigrator.sol";
 contract Migrator is IMigrator {
     using SafeTransferLib for ERC20;
 
-    WETH public immutable weth = WETH(payable(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2));
-    IVault public immutable balancerVault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
-    IUniswapV2Router02 public immutable sushiRouter = IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
+    WETH public immutable weth;
+    IVault public immutable balancerVault;
+    IUniswapV2Router02 public immutable sushiRouter;
+
+    constructor(address wethAddress, address balancerVaultAddress, address sushiRouterAddress) {
+        weth = WETH(payable(wethAddress));
+        balancerVault = IVault(balancerVaultAddress);
+        sushiRouter = IUniswapV2Router02(sushiRouterAddress);
+    }
     
     /**
      * @inheritdoc IMigrator
