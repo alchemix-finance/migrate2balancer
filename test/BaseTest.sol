@@ -24,8 +24,8 @@ contract BaseTest is DSTestPlus {
 
     IBasePool public balancerPoolToken = IBasePool(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
     IRewardPool4626 public auraPool = IRewardPool4626(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
-    AggregatorV3Interface public wethPrice = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
-    AggregatorV3Interface public tokenPrice = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
+    AggregatorV3Interface public wethPriceFeed = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
+    AggregatorV3Interface public tokenPriceFeed = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
 
     // Constructor parameters
     ERC20 public weth = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
@@ -37,7 +37,7 @@ contract BaseTest is DSTestPlus {
         user = hevm.addr(userPrivateKey);
 
         // Set the companion token given any LP token
-        (lpToken, companionToken) = _getPairAddress(address(balancerPoolToken));
+        (lpToken, companionToken) = getPairAddress(address(balancerPoolToken));
 
         migrator = new Migrator(address(weth), balancerVault, router, initHash);
     }
@@ -56,27 +56,27 @@ contract BaseTest is DSTestPlus {
         bool _stakeBpt
     ) internal view returns (IMigrator.MigrationParams memory) {
         // Calculate min amount of Token and WETH from LP
-        (uint256 amountTokenMin, uint256 amountWethMin) = _calculateLpAmounts(_amount);
+        (uint256 amountTokenMin, uint256 amountWethMin) = calculateLpAmounts(_amount);
         // Calculate amount of WETH given amount of Token to create 80/20 TOKEN/WETH balance
-        uint256 wethRequired = _calculateWethRequired(amountTokenMin);
+        uint256 wethRequired = calculateWethRequired(amountTokenMin);
         // Calculate amount of Tokens out given the excess amount of WETH due to 80/20 TOKEN/WETH rebalance (amountWethMin is always > wethRequired)
-        uint256 minAmountTokenOut = _calculateTokenAmountOut(amountWethMin - wethRequired);
+        uint256 minAmountTokenOut = calculateTokenAmountOut(amountWethMin - wethRequired);
         // Calculate amount of BPT out given Tokens and WETH (add original and predicted swapped amounts of companion token)
-        uint256 amountBptOut = _calculateBptAmountOut(amountTokenMin + minAmountTokenOut, wethRequired);
+        uint256 amountBptOut = calculateBptAmountOut(amountTokenMin + minAmountTokenOut, wethRequired);
         // Calculate amount of auraBPT out given BPT
-        uint256 amountAuraBptOut = _calculateAuraBptAmountOut(amountBptOut);
+        uint256 amountAuraBptOut = calculateAuraBptAmountOut(amountBptOut);
 
         IMigrator.MigrationParams memory migrationParams = IMigrator.MigrationParams({
-            balancerPoolToken: balancerPoolToken,
-            auraPool: auraPool,
-            poolTokensIn: _amount,
-            amountCompanionMinimumOut: amountTokenMin,
-            amountWETHMinimumOut: amountWethMin,
-            wethRequired: wethRequired,
-            minAmountTokenOut: minAmountTokenOut,
+            balancerPoolToken:          balancerPoolToken,
+            auraPool:                   auraPool,
+            poolTokensIn:               _amount,
+            amountCompanionMinimumOut:  amountTokenMin,
+            amountWETHMinimumOut:       amountWethMin,
+            wethRequired:               wethRequired,
+            minAmountTokenOut:          minAmountTokenOut,
             amountBalancerLiquidityOut: amountBptOut,
-            amountAuraSharesMinimum: amountAuraBptOut,
-            stake: _stakeBpt
+            amountAuraSharesMinimum:    amountAuraBptOut,
+            stake:                      _stakeBpt
         });
 
         return migrationParams;
@@ -88,9 +88,9 @@ contract BaseTest is DSTestPlus {
      * @return Return values for min amount out of TOKEN and WETH with unwrap slippage
      * @dev Calculation used for testing, in production values should be calculated in UI
      */
-    function _calculateLpAmounts(uint256 _lpAmount) internal view returns (uint256, uint256) {
-        uint256 tokenPriceEth = _tokenPrice();
-        uint256 wethPriceUsd = _wethPrice();
+    function calculateLpAmounts(uint256 _lpAmount) internal view returns (uint256, uint256) {
+        uint256 tokenPriceEth = tokenPrice();
+        uint256 wethPriceUsd = wethPrice();
         uint256 lpSupply = lpToken.totalSupply();
         (uint256 wethReserves, uint256 tokenReserves, ) = lpToken.getReserves();
 
@@ -113,10 +113,10 @@ contract BaseTest is DSTestPlus {
      * @notice Given an amount of a companion token, calculate the amount of WETH to create an 80/20 TOKEN/WETH ratio
      * @param _tokenAmount Amount of Token
      */
-    function _calculateWethRequired(uint256 _tokenAmount) internal view returns (uint256) {
+    function calculateWethRequired(uint256 _tokenAmount) internal view returns (uint256) {
         uint256[] memory normalizedWeights = IManagedPool(address(balancerPoolToken)).getNormalizedWeights();
 
-        return (((_tokenAmount * _tokenPrice()) / 1 ether) * normalizedWeights[0]) / normalizedWeights[1];
+        return (((_tokenAmount * tokenPrice()) / 1 ether) * normalizedWeights[0]) / normalizedWeights[1];
     }
 
     /**
@@ -124,8 +124,8 @@ contract BaseTest is DSTestPlus {
      * @param _wethAmount Amount of WETH to swap
      * @dev This is the excess WETH after we know expected rebalanced 80/20 amounts
      */
-    function _calculateTokenAmountOut(uint256 _wethAmount) internal view returns (uint256) {
-        uint256 minAmountTokenOut = ((((_wethAmount * _tokenPrice()) / (1 ether)) * (BPS - slippage)) / BPS);
+    function calculateTokenAmountOut(uint256 _wethAmount) internal view returns (uint256) {
+        uint256 minAmountTokenOut = ((((_wethAmount * tokenPrice()) / (1 ether)) * (BPS - slippage)) / BPS);
 
         return minAmountTokenOut;
     }
@@ -135,7 +135,7 @@ contract BaseTest is DSTestPlus {
      * @param _wethAmountIn Amount of WETH
      * @param _tokenAmountIn Amount of Token
      */
-    function _calculateBptAmountOut(uint256 _tokenAmountIn, uint256 _wethAmountIn) internal view returns (uint256) {
+    function calculateBptAmountOut(uint256 _tokenAmountIn, uint256 _wethAmountIn) internal view returns (uint256) {
         bytes32 balancerPoolId = balancerPoolToken.getPoolId();
 
         (, uint256[] memory balances, ) = IVault(balancerVault).getPoolTokens(balancerPoolId);
@@ -162,7 +162,7 @@ contract BaseTest is DSTestPlus {
      * @notice Given an amount of BPT in, calculate the expected auraBPT out
      * @param _bptAmountIn Amount of BPT
      */
-    function _calculateAuraBptAmountOut(uint256 _bptAmountIn) internal view returns (uint256) {
+    function calculateAuraBptAmountOut(uint256 _bptAmountIn) internal view returns (uint256) {
         uint256 amountOut = IRewardPool4626(address(auraPool)).previewDeposit(_bptAmountIn);
 
         return amountOut;
@@ -173,8 +173,8 @@ contract BaseTest is DSTestPlus {
      * @dev Make sure price is not stale or incorrect
      * @return Return the correct price
      */
-    function _wethPrice() internal view returns (uint256) {
-        (uint80 roundId, int256 price, , uint256 timestamp, uint80 answeredInRound) = wethPrice.latestRoundData();
+    function wethPrice() internal view returns (uint256) {
+        (uint80 roundId, int256 price, , uint256 timestamp, uint80 answeredInRound) = wethPriceFeed.latestRoundData();
 
         require(answeredInRound >= roundId, "Stale price");
         require(timestamp != 0, "Round not complete");
@@ -188,8 +188,8 @@ contract BaseTest is DSTestPlus {
      * @dev Make sure price is not stale or incorrect
      * @return Return the correct price
      */
-    function _tokenPrice() internal view returns (uint256) {
-        (uint80 roundId, int256 price, , uint256 timestamp, uint80 answeredInRound) = tokenPrice.latestRoundData();
+    function tokenPrice() internal view returns (uint256) {
+        (uint80 roundId, int256 price, , uint256 timestamp, uint80 answeredInRound) = tokenPriceFeed.latestRoundData();
 
         require(answeredInRound >= roundId, "Stale price");
         require(timestamp != 0, "Round not complete");
@@ -202,7 +202,7 @@ contract BaseTest is DSTestPlus {
      * @notice Get the UniV2 pool and companion token addresses for a given balancer pool
      * @param balancerToken Address of the balancer pool token
      */
-    function _getPairAddress(address balancerToken) internal view returns (IUniswapV2Pair, ERC20) {
+    function getPairAddress(address balancerToken) internal view returns (IUniswapV2Pair, ERC20) {
         bytes32 poolId = IBasePool(balancerToken).getPoolId();
         (IERC20[] memory balancerPoolTokens /* uint256[] memory balances */ /* uint256 lastChangeBlock */, , ) = IVault(
             balancerVault
@@ -230,13 +230,12 @@ contract BaseTest is DSTestPlus {
         address poolToken = IUniswapV2Factory(factory).getPair(tokenA, tokenB);
 
         // Get the expected pool address
-        address expectedPoolAddress = address(
-            uint160(
-                uint256(
-                    keccak256(abi.encodePacked(hex"ff", factory, keccak256(abi.encodePacked(tokenA, tokenB)), initHash))
-                )
-            )
-        );
+        address expectedPoolAddress = address(uint160(uint256(keccak256(abi.encodePacked(
+            hex'ff',
+            factory,
+            keccak256(abi.encodePacked(tokenA, tokenB)),
+            initHash
+        )))));
 
         // Verify the pool address
         require(expectedPoolAddress == poolToken, "Pool address verification failed");
