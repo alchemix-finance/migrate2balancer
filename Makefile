@@ -24,10 +24,10 @@ MATCH_PATH=--match-path test/$(FILE).t.sol
 MATCH_TEST=--match-test $(TEST)
 
 # Mainnet rpc url
-RPC=https://eth-mainnet.alchemyapi.io/v2/$(ALCHEMY_API_KEY)
+RPC=https://eth-mainnet.alchemyapi.io/v2/$(ALCHEMY_API_MAINNET_KEY)
 
 # Goerli rpc url 
-TESTNET_RPC=https://eth-goerli.g.alchemy.com/v2/$(ALCHEMY_API_KEY)
+TESTNET_RPC=https://eth-goerli.g.alchemy.com/v2/$(ALCHEMY_API_GOERLI_KEY)
 
 # fork from rpc
 FORK_URL=--fork-url $(RPC)
@@ -80,7 +80,7 @@ test_file_block_debug_test :; FOUNDRY_PROFILE=$(PROFILE) forge test $(FORK_URL) 
 
 # shortcuts for deploying contracts
 
-# add constructor args if needed "$$(cast abi-encode "constructor(address,address)" "0xbeef" "0xbeef")"
+# add constructor args if needed
 ARGS=--constructor-args
 
 # etherscan verification
@@ -92,8 +92,8 @@ KEY=--private-key $(PRIVATE_KEY)
 # Mainnet deployment command
 DEPLOY_MAINNET=--rpc-url $(RPC) $(ARGS) $(KEY) $(VERIFY) src/$(FILE).sol:$(FILE)
 
-# Goerli deployment command (add args)
-DEPLOY_GOERLI=--rpc-url $(TESTNET_RPC) $(KEY) $(VERIFY) src/$(FILE).sol:$(FILE)
+# Goerli deployment command
+DEPLOY_GOERLI=--rpc-url $(TESTNET_RPC)  $(ARGS) $(KEY) $(VERIFY) src/$(FILE).sol:$(FILE)
 
 # Deploy a contract to mainnet (assumes file and contract name match) "make deploy_mainnet FILE=<filename> ARGS=<constructor args>
 deploy_mainnet :; forge create $(DEPLOY_MAINNET)
