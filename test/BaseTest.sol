@@ -13,22 +13,22 @@ import "src/interfaces/chainlink/AggregatorV3Interface.sol";
 contract BaseTest is DSTestPlus {
     Migrator public migrator;
 
-    // Sushi LP to migrate from
-    IUniswapV2Pair public lpToken = IUniswapV2Pair(0xC3f279090a47e80990Fe3a9c30d24Cb117EF91a8);
-    // Balancer pool to migrate to
-    IBasePool public balancerPoolToken = IBasePool(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
-    // Aura pool to stake BPT in
-    IRewardPool4626 public auraPool = IRewardPool4626(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
-
     // Test variables
     address public user;
     uint256 public userPrivateKey = 0xBEEF;
     uint256 public slippage = 10;
     uint256 public BPS = 10000;
+
     ERC20 public companionToken;
-    ERC20 public weth = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    IUniswapV2Pair public lpToken;
+
+    IBasePool public balancerPoolToken = IBasePool(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
+    IRewardPool4626 public auraPool = IRewardPool4626(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
     AggregatorV3Interface public wethPrice = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
     AggregatorV3Interface public tokenPrice = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
+
+    // Constructor parameters
+    ERC20 public weth = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     address public balancerVault = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
     address public router = 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F;
     bytes32 public initHash = hex"e18a34eb0e04b04f7a0ac29a6e80748dca96319b42c54d679cb821dca90c6303";
@@ -37,7 +37,7 @@ contract BaseTest is DSTestPlus {
         user = hevm.addr(userPrivateKey);
 
         // Set the companion token given any LP token
-        companionToken = lpToken.token0() == address(weth) ? ERC20(lpToken.token1()) : ERC20(lpToken.token0());
+        (lpToken, companionToken) = _getPairAddress(address(balancerPoolToken));
 
         migrator = new Migrator(address(weth), balancerVault, router, initHash);
     }
@@ -68,7 +68,6 @@ contract BaseTest is DSTestPlus {
 
         IMigrator.MigrationParams memory migrationParams = IMigrator.MigrationParams({
             balancerPoolToken: balancerPoolToken,
-            poolToken: lpToken,
             auraPool: auraPool,
             poolTokensIn: _amount,
             amountCompanionMinimumOut: amountTokenMin,
@@ -137,7 +136,7 @@ contract BaseTest is DSTestPlus {
      * @param _tokenAmountIn Amount of Token
      */
     function _calculateBptAmountOut(uint256 _tokenAmountIn, uint256 _wethAmountIn) internal view returns (uint256) {
-        bytes32 balancerPoolId = IBasePool(address(balancerPoolToken)).getPoolId();
+        bytes32 balancerPoolId = balancerPoolToken.getPoolId();
 
         (, uint256[] memory balances, ) = IVault(balancerVault).getPoolTokens(balancerPoolId);
         uint256[] memory normalizedWeights = IManagedPool(address(balancerPoolToken)).getNormalizedWeights();
@@ -152,7 +151,7 @@ contract BaseTest is DSTestPlus {
                 normalizedWeights,
                 amountsIn,
                 ERC20(address(balancerPoolToken)).totalSupply(),
-                IBasePool(address(balancerPoolToken)).getSwapFeePercentage()
+                balancerPoolToken.getSwapFeePercentage()
             )
         );
 
@@ -197,5 +196,51 @@ contract BaseTest is DSTestPlus {
         require(price > 0, "Chainlink answer reporting 0");
 
         return uint256(price);
+    }
+
+    /**
+     * @notice Get the UniV2 pool and companion token addresses for a given balancer pool
+     * @param balancerToken Address of the balancer pool token
+     */
+    function _getPairAddress(address balancerToken) internal view returns (IUniswapV2Pair, ERC20) {
+        bytes32 poolId = IBasePool(balancerToken).getPoolId();
+        (IERC20[] memory balancerPoolTokens /* uint256[] memory balances */ /* uint256 lastChangeBlock */, , ) = IVault(
+            balancerVault
+        ).getPoolTokens(poolId);
+
+        IERC20 companion;
+        if (balancerPoolTokens[0] == IERC20(address(weth))) {
+            companion = balancerPoolTokens[1];
+        } else if (balancerPoolTokens[1] == IERC20(address(weth))) {
+            companion = balancerPoolTokens[0];
+        } else {
+            // If neither token is WETH, then the migration will fail
+            revert("Balancer pool must contain WETH");
+        }
+
+        address tokenA = address(companion);
+        address tokenB = address(weth);
+
+        // Sort the tokens
+        if (tokenA > tokenB) {
+            (tokenA, tokenB) = (tokenB, tokenA);
+        }
+
+        address factory = address(IUniswapV2Factory(IUniswapV2Router02(router).factory()));
+        address poolToken = IUniswapV2Factory(factory).getPair(tokenA, tokenB);
+
+        // Get the expected pool address
+        address expectedPoolAddress = address(
+            uint160(
+                uint256(
+                    keccak256(abi.encodePacked(hex"ff", factory, keccak256(abi.encodePacked(tokenA, tokenB)), initHash))
+                )
+            )
+        );
+
+        // Verify the pool address
+        require(expectedPoolAddress == poolToken, "Pool address verification failed");
+
+        return (IUniswapV2Pair(poolToken), ERC20(address(companion)));
     }
 }

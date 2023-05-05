@@ -23,8 +23,6 @@ interface IMigrator {
     struct MigrationParams {
         // 80/20 TOKEN/WETH Balancer Pool Token
         IBasePool balancerPoolToken;
-        // UniV2 50/50 TOKEN/WETH LP Token
-        IUniswapV2Pair poolToken;
         // ERC4626 Aura pool address
         IRewardPool4626 auraPool;
         // Amount of LP tokens to be migrated
