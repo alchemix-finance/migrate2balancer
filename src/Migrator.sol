@@ -4,8 +4,8 @@ pragma solidity ^0.8.15;
 import "src/interfaces/IMigrator.sol";
 
 /**
- * @title Sushi LP to Balancer LP migrator
- * @notice Tool to facilitate migrating Sushi LPs to Balancer or Aura
+ * @title UniV2 LP to Balancer LP migrator
+ * @notice Tool to facilitate migrating UniV2 LPs to Balancer or Aura
  * @dev LP: IUniswapV2Pair LP Token
  * @dev BPT: 20WETH-80TOKEN Balancer Pool Token
  * @dev auraBPT: 20WETH-80TOKEN Aura Deposit Vault
@@ -16,19 +16,19 @@ contract Migrator is IMigrator {
     WETH public immutable weth;
     IVault public immutable balancerVault;
     IUniswapV2Router02 public immutable router;
+    bytes32 public immutable factoryInitHash;
 
-    constructor(address wethAddress, address balancerVaultAddress, address routerAddress) {
+    constructor(address wethAddress, address balancerVaultAddress, address routerAddress, bytes32 initHash) {
         weth = WETH(payable(wethAddress));
         balancerVault = IVault(balancerVaultAddress);
         router = IUniswapV2Router02(routerAddress);
+        factoryInitHash = initHash;
     }
     
     /**
      * @inheritdoc IMigrator
      */
     function migrate(MigrationParams calldata params) external {
-        validatePairAddress(params.sushiPoolToken);
-
         // If the user is staking, then the Aura pool asset must be the same as the Balancer pool token
         if (params.stake) {
             require(address(params.balancerPoolToken) == params.auraPool.asset(), "Invalid Aura pool");
@@ -39,32 +39,36 @@ contract Migrator is IMigrator {
         (IERC20[] memory balancerPoolTokens, /* uint256[] memory balances */, /* uint256 lastChangeBlock */) = balancerVault.getPoolTokens(poolId);
         require(balancerPoolTokens.length == 2, "Invalid balancer pool");
 
-        // Require the pool tokens to be the same as the Balancer pool tokens (order agnostic)
-        require(
-            (params.sushiPoolToken.token0() == address(balancerPoolTokens[0]) && 
-             params.sushiPoolToken.token1() == address(balancerPoolTokens[1])) 
-            || 
-            (params.sushiPoolToken.token0() == address(balancerPoolTokens[1]) && 
-             params.sushiPoolToken.token1() == address(balancerPoolTokens[0])),
-            "LP token pairs do not match"
-        );
-
-        // Transfer the pool tokens to this contract before we conduct any mutations
-        ERC20(address(params.sushiPoolToken)).safeTransferFrom(msg.sender, address(this), params.sushiPoolTokensIn);
-
-        // Find which token is not WETH, that is the companion token.
-        IERC20 companionToken = balancerPoolTokens[1] == IERC20(address(weth)) ? balancerPoolTokens[0] : balancerPoolTokens[1];
-
-        // Check if the pool token has been approved for the Sushiswap router
-        if (params.sushiPoolToken.allowance(address(this), address(router)) < params.sushiPoolTokensIn) {
-            ERC20(address(params.sushiPoolToken)).safeApprove(address(router), type(uint256).max);
+        // Find which token is WETH and which is the companion token
+        IERC20 wethToken;
+        IERC20 companionToken;
+        if (balancerPoolTokens[0] == IERC20(address(weth))) {
+            wethToken = balancerPoolTokens[0];
+            companionToken = balancerPoolTokens[1];
+        } else if (balancerPoolTokens[1] == IERC20(address(weth))) {
+            wethToken = balancerPoolTokens[1];
+            companionToken = balancerPoolTokens[0];
+        } else {
+            // If neither token is WETH, then the migration will fail
+            revert("Balancer pool must contain WETH");
         }
 
-        // The ordering of `tokenA` and `tokenB` is handled upstream by the Sushiswap router
+        // Verify there is a matching UniV2 pool
+        validatePairAddress(address(companionToken), address(wethToken), address(params.poolToken));
+        
+        // Transfer the pool tokens to this contract before we conduct any mutations
+        ERC20(address(params.poolToken)).safeTransferFrom(msg.sender, address(this), params.poolTokensIn);
+
+        // Check if the pool token has been approved for the router
+        if (params.poolToken.allowance(address(this), address(router)) < params.poolTokensIn) {
+            ERC20(address(params.poolToken)).safeApprove(address(router), type(uint256).max);
+        }
+
+        // The ordering of `tokenA` and `tokenB` is handled upstream by the router
         router.removeLiquidity({
             tokenA:     address(companionToken),
             tokenB:     address(weth),
-            liquidity:  params.sushiPoolTokensIn,
+            liquidity:  params.poolTokensIn,
             amountAMin: params.amountCompanionMinimumOut,
             amountBMin: params.amountWETHMinimumOut,
             to:         address(this),
@@ -143,18 +147,11 @@ contract Migrator is IMigrator {
         }
 
         // Indiate who migrated, amount of LP tokens in, amount of BPT out, and whether the user is staking
-        emit Migrated(msg.sender, params.sushiPoolTokensIn, poolTokensReceived, params.stake);
+        emit Migrated(msg.sender, params.poolTokensIn, poolTokensReceived, params.stake);
     }
 
-    // Validate the sushi pool address
-    function validatePairAddress(IUniswapV2Pair sushiPoolToken) internal view {
-        // Get sushi factory
-        IUniswapV2Factory sushiFactory = IUniswapV2Factory(router.factory());
-        
-        // Get the tokens in the pool
-        address tokenA = sushiPoolToken.token0();
-        address tokenB = sushiPoolToken.token1();
-
+    // Validate the lp pool address
+    function validatePairAddress(address tokenA, address tokenB, address poolToken) internal view {
         // Sort the tokens
         if (tokenA > tokenB) {
             (tokenA, tokenB) = (tokenB, tokenA);
@@ -165,14 +162,10 @@ contract Migrator is IMigrator {
             hex'ff',
             address(IUniswapV2Factory(router.factory())),
             keccak256(abi.encodePacked(tokenA, tokenB)),
-            // Init hash for the SushiSwap factory
-            hex'e18a34eb0e04b04f7a0ac29a6e80748dca96319b42c54d679cb821dca90c6303' 
+            factoryInitHash
         )))));
 
-        // Get the actual pool address
-        address actualPoolAddress = sushiFactory.getPair(tokenA, tokenB);
-
         // Verify the pool address
-        require(expectedPoolAddress == actualPoolAddress, "Pool address verification failed");
+        require(expectedPoolAddress == poolToken, "Pool address verification failed");
     }
 }

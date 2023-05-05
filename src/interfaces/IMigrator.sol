@@ -24,11 +24,11 @@ interface IMigrator {
         // 80/20 TOKEN/WETH Balancer Pool Token
         IBasePool balancerPoolToken;
         // UniV2 50/50 TOKEN/WETH LP Token
-        IUniswapV2Pair sushiPoolToken;
+        IUniswapV2Pair poolToken;
         // ERC4626 Aura pool address
         IRewardPool4626 auraPool;
         // Amount of LP tokens to be migrated
-        uint256 sushiPoolTokensIn;
+        uint256 poolTokensIn;
         // Minimum amount of Tokens to be received from the LP
         uint256 amountCompanionMinimumOut;
         // Minimum amount of WETH to be received from the LP

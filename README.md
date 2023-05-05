@@ -1,15 +1,15 @@
-# Alchemix Sushi 50/50 LP to Balancer 80/20 LP Migrator
+# Alchemix UniV2 50/50 LP to Balancer 80/20 LP Migrator
 
 ## About
 
-Migrator.sol facilitates migrating Sushi LPs to an 80/20 Balancer LP with the option to deposit directly into an Aura pool.
+Migrator.sol facilitates migrating UniV2 LPs to an 80/20 Balancer LP with the option to deposit directly into an Aura pool.
 
--   LP: Sushi LP Token
+-   LP: UniV2 LP Token
 -   BPT: 20WETH-80TOKEN Balancer Pool Token
 -   auraBPT: 20WETH-80TOKEN Aura Deposit Pool
 -   See `IMigrator.sol` for the params required to migrate
 -   See `BaseTest.sol` for examples of the off-chain calculations that need to be made before calling `migrate()`
--   The Migrator will unwrap the Sushi LP, swap the 50/50 TOKEN/WETH balance for an 80/20 TOKEN/WETH balance, deposit TOKEN and WETH into a Balancer pool, and either deposit the newly minted BPT tokens into an Aura pool sending `msg.sender` auraBPT, or transfer the BPT directly to the `msg.sender`
+-   The Migrator will unwrap the UniV2 LP, swap the 50/50 TOKEN/WETH balance for an 80/20 TOKEN/WETH balance, deposit TOKEN and WETH into a Balancer pool, and either deposit the newly minted BPT tokens into an Aura pool sending `msg.sender` auraBPT, or transfer the BPT directly to the `msg.sender`
 
 ## Getting Started
 
