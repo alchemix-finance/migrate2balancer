@@ -67,7 +67,6 @@ contract Migrator is IMigrator {
 
         // Check if the pool token has been approved for the router
         if (IUniswapV2Pair(poolToken).allowance(address(this), address(router)) < params.poolTokensIn) {
-            ERC20(address(poolToken)).safeApprove(address(router), 0);
             ERC20(address(poolToken)).safeApprove(address(router), type(uint256).max);
         }
 
@@ -123,6 +122,7 @@ contract Migrator is IMigrator {
 
         // Check if the balancer vault has been approved to spend the companion token
         if (ERC20(address(companionToken)).allowance(address(this), address(balancerVault)) < companionToken.balanceOf(address(this))) {
+            ERC20(address(companionToken)).safeApprove(address(balancerVault), 0);
             ERC20(address(companionToken)).safeApprove(address(balancerVault), companionToken.balanceOf(address(this)));
         }
 

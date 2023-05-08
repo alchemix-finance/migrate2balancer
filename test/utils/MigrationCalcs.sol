@@ -11,13 +11,21 @@ contract MigrationCalcs {
 
     // Parameters required for calculating migration
     struct MigrationCalcParams {
+        // Whether to stake the BPT in the Aura pool
         bool stakeBpt;
+        // Amount of LP tokens to migrate
         uint256 amount;
+        // Slippage tolerance
         uint256 slippage;
+        // LP token address
         IUniswapV2Pair lpToken;
+        // 80/20 TOKEN/WETH Balancer Pool Token
         IBasePool balancerPoolToken;
+        // ERC4626 Aura pool address
         IRewardPool4626 auraPool;
+        // Chainlink WETH/USD price feed
         AggregatorV3Interface wethPriceFeed;
+        // Chainlink Token/WETH price feed
         AggregatorV3Interface tokenPriceFeed;
     }
 
@@ -69,6 +77,10 @@ contract MigrationCalcs {
 
         return migrationParams;
     }
+
+    /*
+        Internal functions
+    */
 
     /**
      * @notice Calculate the min amount of TOKEN and WETH for a given LP amount
