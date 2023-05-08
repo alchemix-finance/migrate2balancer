@@ -31,7 +31,6 @@ contract BaseTest is DSTestPlus {
     ERC20 public weth = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     address public balancerVault = address(balancerPoolToken.getVault());
     address public router = 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F;
-    bytes32 public initHash = hex"e18a34eb0e04b04f7a0ac29a6e80748dca96319b42c54d679cb821dca90c6303";
     
     function setUp() public {
         user = hevm.addr(userPrivateKey);
@@ -41,7 +40,7 @@ contract BaseTest is DSTestPlus {
         
         migrationCalcs = new MigrationCalcs();
 
-        migrator = new Migrator(address(weth), balancerVault, router, initHash);
+        migrator = new Migrator(address(weth), balancerVault, router);
     }
 
     /*
@@ -81,27 +80,11 @@ contract BaseTest is DSTestPlus {
             revert("Balancer pool must contain WETH");
         }
 
-        address tokenA = address(companion);
-        address tokenB = address(weth);
-
-        // Sort the tokens
-        if (tokenA > tokenB) {
-            (tokenA, tokenB) = (tokenB, tokenA);
-        }
-
         address factory = address(IUniswapV2Factory(IUniswapV2Router02(router).factory()));
-        address poolToken = IUniswapV2Factory(factory).getPair(tokenA, tokenB);
-
-        // Get the expected pool address
-        address expectedPoolAddress = address(uint160(uint256(keccak256(abi.encodePacked(
-            hex'ff',
-            factory,
-            keccak256(abi.encodePacked(tokenA, tokenB)),
-            initHash
-        )))));
+        address poolToken = IUniswapV2Factory(factory).getPair(address(companion), address(weth));
 
         // Verify the pool address
-        require(expectedPoolAddress == poolToken, "Pool address verification failed");
+        require(poolToken != address(0), "Pool address verification failed");
 
         return (IUniswapV2Pair(poolToken), ERC20(address(companion)));
     }

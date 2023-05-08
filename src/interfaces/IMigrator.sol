@@ -1,20 +1,8 @@
 // SPDX-License-Identifier: GPL-3
 pragma solidity ^0.8.15;
 
-import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import "solmate/src/tokens/ERC20.sol";
-import "solmate/src/tokens/WETH.sol";
-import "solmate/src/utils/SafeTransferLib.sol";
-
-import "src/interfaces/balancer/IVault.sol";
-import "src/interfaces/balancer/WeightedPoolUserData.sol";
-import "src/interfaces/balancer/IAsset.sol";
-import "src/interfaces/balancer/IBalancerPoolToken.sol";
-import "src/interfaces/balancer/IBasePool.sol";
-import "src/interfaces/aura/IRewardPool4626.sol";
-import "src/interfaces/univ2/IUniswapV2Pair.sol";
-import "src/interfaces/univ2/IUniswapV2Router02.sol";
-import "src/interfaces/univ2/IUniswapV2Factory.sol";
+import { IBasePool } from "src/interfaces/balancer/IBasePool.sol";
+import { IRewardPool4626 } from "src/interfaces/aura/IRewardPool4626.sol";
 
 interface IMigrator {
     /**

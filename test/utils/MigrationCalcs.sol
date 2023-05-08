@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: GPL-3
 pragma solidity ^0.8.15;
 
-import "src/interfaces/IMigrator.sol";
-import "src/interfaces/balancer/IManagedPool.sol";
-import "src/interfaces/balancer/WeightedMath.sol";
-import "src/interfaces/chainlink/AggregatorV3Interface.sol";
+import { ERC20 } from "lib/solmate/src/tokens/ERC20.sol";
+
+import { IUniswapV2Pair } from "src/interfaces/univ2/IUniswapV2Pair.sol";
+import { IVault } from "src/interfaces/balancer/IVault.sol";
+import { IBasePool } from "src/interfaces/balancer/IBasePool.sol";
+import { IManagedPool } from "src/interfaces/balancer/IManagedPool.sol";
+import { WeightedMath } from "src/interfaces/balancer/WeightedMath.sol";
+import { IRewardPool4626 } from "src/interfaces/aura/IRewardPool4626.sol";
+import { AggregatorV3Interface } from "src/interfaces/chainlink/AggregatorV3Interface.sol";
+
+import { IMigrator } from "src/interfaces/IMigrator.sol";
 
 contract MigrationCalcs {
     uint256 internal immutable BPS = 10000;

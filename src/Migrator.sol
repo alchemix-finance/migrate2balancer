@@ -1,7 +1,19 @@
 // SPDX-License-Identifier: GPL-3
 pragma solidity ^0.8.15;
 
-import "src/interfaces/IMigrator.sol";
+import { WETH } from "solmate/src/tokens/WETH.sol";
+import { ERC20 } from "solmate/src/tokens/ERC20.sol";
+import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import { SafeTransferLib } from "solmate/src/utils/SafeTransferLib.sol";
+
+import { IUniswapV2Pair } from "src/interfaces/univ2/IUniswapV2Pair.sol";
+import { IUniswapV2Factory } from "src/interfaces/univ2/IUniswapV2Factory.sol";
+import { IUniswapV2Router02 } from "src/interfaces/univ2/IUniswapV2Router02.sol";
+import { IAsset } from "src/interfaces/balancer/IAsset.sol";
+import { IVault } from "src/interfaces/balancer/IVault.sol";
+import { WeightedPoolUserData } from "src/interfaces/balancer/WeightedPoolUserData.sol";
+
+import { IMigrator } from "src/interfaces/IMigrator.sol";
 
 /**
  * @title UniV2 LP to Balancer LP migrator
@@ -21,15 +33,12 @@ contract Migrator is IMigrator {
     IUniswapV2Router02 public immutable router;
     // Factory for the UniV2 LP token
     IUniswapV2Factory public immutable factory;
-    // Init hash for the router's factory
-    bytes32 public immutable factoryInitHash;
 
-    constructor(address wethAddress, address balancerVaultAddress, address routerAddress, bytes32 initHash) {
+    constructor(address wethAddress, address balancerVaultAddress, address routerAddress) {
         weth = WETH(payable(wethAddress));
         balancerVault = IVault(balancerVaultAddress);
         router = IUniswapV2Router02(routerAddress);
         factory = IUniswapV2Factory(router.factory());
-        factoryInitHash = initHash;
     }
     
     /**
@@ -120,11 +129,9 @@ contract Migrator is IMigrator {
             maximumAmountsIn[1] = weth.balanceOf(address(this));
         }
 
-        // Check if the balancer vault has been approved to spend the companion token
-        if (ERC20(address(companionToken)).allowance(address(this), address(balancerVault)) < companionToken.balanceOf(address(this))) {
-            ERC20(address(companionToken)).safeApprove(address(balancerVault), 0);
-            ERC20(address(companionToken)).safeApprove(address(balancerVault), companionToken.balanceOf(address(this)));
-        }
+        // Approve the balancer vault to spend the companion token
+        ERC20(address(companionToken)).safeApprove(address(balancerVault), 0);
+        ERC20(address(companionToken)).safeApprove(address(balancerVault), companionToken.balanceOf(address(this)));        
 
         balancerVault.joinPool({
             poolId: poolId,
