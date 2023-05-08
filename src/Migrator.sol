@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3
-pragma solidity ^0.8.15;
+pragma solidity 0.8.19;
 
 import { WETH } from "solmate/src/tokens/WETH.sol";
 import { ERC20 } from "solmate/src/tokens/ERC20.sol";

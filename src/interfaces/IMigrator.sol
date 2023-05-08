@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3
-pragma solidity ^0.8.15;
+pragma solidity 0.8.19;
 
 import { IBasePool } from "src/interfaces/balancer/IBasePool.sol";
 import { IRewardPool4626 } from "src/interfaces/aura/IRewardPool4626.sol";
