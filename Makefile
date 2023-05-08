@@ -26,8 +26,8 @@ MATCH_TEST=--match-test $(TEST)
 # Mainnet rpc url
 RPC=https://eth-mainnet.alchemyapi.io/v2/$(ALCHEMY_API_MAINNET_KEY)
 
-# Goerli rpc url 
-TESTNET_RPC=https://eth-goerli.g.alchemy.com/v2/$(ALCHEMY_API_GOERLI_KEY)
+# Sepolia rpc url 
+TESTNET_RPC=https://sepolia.infura.io/v3/$(INFURA_API_KEY)
 
 # fork from rpc
 FORK_URL=--fork-url $(RPC)
@@ -81,7 +81,7 @@ test_file_block_debug_test :; FOUNDRY_PROFILE=$(PROFILE) forge test $(FORK_URL) 
 # shortcuts for deploying contracts
 
 # add constructor args if needed
-ARGS=--constructor-args
+ARGS=--constructor-args "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" "0xBA12222222228d8Ba445958a75a0704d566BF2C8" "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F"
 
 # etherscan verification
 VERIFY=--etherscan-api-key $(ETHERSCAN_API_KEY) --verify
@@ -92,11 +92,11 @@ KEY=--private-key $(PRIVATE_KEY)
 # Mainnet deployment command
 DEPLOY_MAINNET=--rpc-url $(RPC) $(ARGS) $(KEY) $(VERIFY) src/$(FILE).sol:$(FILE)
 
-# Goerli deployment command
-DEPLOY_GOERLI=--rpc-url $(TESTNET_RPC)  $(ARGS) $(KEY) $(VERIFY) src/$(FILE).sol:$(FILE)
+# Sepolia deployment command
+DEPLOY_SEPOLIA=--rpc-url $(TESTNET_RPC)  $(ARGS) $(KEY) $(VERIFY) src/$(FILE).sol:$(FILE)
 
 # Deploy a contract to mainnet (assumes file and contract name match) "make deploy_mainnet FILE=<filename>
 deploy_mainnet :; forge create $(DEPLOY_MAINNET)
 
-# Deploy a contract to goerli (assumes file and contract name match) "make deploy_goerli FILE=<filename>"
-deploy_goerli :; forge create $(DEPLOY_GOERLI)
+# Deploy a contract to sepolia (assumes file and contract name match) "make deploy_sepolia FILE=<filename>"
+deploy_sepolia :; forge create $(DEPLOY_SEPOLIA)

@@ -34,11 +34,11 @@ interface IMigrator {
     /**
      * @notice Emitted when an account migrates from UniV2 LP to BPT or auraBPT
      * @param account The account migrating
-     * @param lpAmountMigrated Amount of LP tokens migrated
-     * @param amountReceived The amount of BPT received
+     * @param poolTokensMigrated Amount of LP tokens migrated
+     * @param amountReceived The amount of BPT or auraBPT received
      * @param staked Indicates if the account is staking BPT in the Aura pool
      */
-    event Migrated(address indexed account, uint256 lpAmountMigrated, uint256 amountReceived, bool staked);
+    event Migrated(address indexed account, uint256 poolTokensMigrated, uint256 amountReceived, bool staked);
 
     /**
      * @notice Migrate UniV2 LP position into BPT position

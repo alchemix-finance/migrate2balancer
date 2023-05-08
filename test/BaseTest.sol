@@ -20,7 +20,7 @@ contract BaseTest is DSTestPlus {
     uint256 public BPS = 10000;
 
     ERC20 public companionToken;
-    IUniswapV2Pair public lpToken;
+    IUniswapV2Pair public poolToken;
 
     IBasePool public balancerPoolToken = IBasePool(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
     IRewardPool4626 public auraPool = IRewardPool4626(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
@@ -35,24 +35,25 @@ contract BaseTest is DSTestPlus {
     function setUp() public {
         user = hevm.addr(userPrivateKey);
 
-        // Set the companion token given any LP token
-        (lpToken, companionToken) = getPairAddress(address(balancerPoolToken));
+        // Get the UniV2 pool and companion token addresses given any balancer pool token
+        (poolToken, companionToken) = getPairAddress(balancerPoolToken);
         
         migrationCalcs = new MigrationCalcs();
 
         migrator = new Migrator(address(weth), balancerVault, router);
     }
 
-    /*
-        Helper functions used for testing
-    */
-
+    /**
+     * @notice Get the migration calculation parameters for a given migration
+     * @param stakeBpt Whether to stake BPT or not
+     * @param amount Amount of UniV2 LP tokens to migrate
+     */
     function getMigrationCalcParams(bool stakeBpt, uint256 amount) internal view returns (MigrationCalcs.MigrationCalcParams memory) {
         MigrationCalcs.MigrationCalcParams memory migrationCalcParams = MigrationCalcs.MigrationCalcParams({
             stakeBpt:           stakeBpt,
             amount:             amount,
             slippage:           slippage,
-            lpToken:            lpToken,
+            poolToken:          poolToken,
             balancerPoolToken:  balancerPoolToken,
             auraPool:           auraPool,
             wethPriceFeed:      wethPriceFeed,
@@ -66,8 +67,8 @@ contract BaseTest is DSTestPlus {
      * @notice Get the UniV2 pool and companion token addresses for a given balancer pool
      * @param balancerToken Address of the balancer pool token
      */
-    function getPairAddress(address balancerToken) internal view returns (IUniswapV2Pair, ERC20) {
-        bytes32 poolId = IBasePool(balancerToken).getPoolId();
+    function getPairAddress(IBasePool balancerToken) internal view returns (IUniswapV2Pair, ERC20) {
+        bytes32 poolId = balancerToken.getPoolId();
         (IERC20[] memory balancerPoolTokens, , ) = IVault(balancerVault).getPoolTokens(poolId);
 
         IERC20 companion;
@@ -81,11 +82,11 @@ contract BaseTest is DSTestPlus {
         }
 
         address factory = address(IUniswapV2Factory(IUniswapV2Router02(router).factory()));
-        address poolToken = IUniswapV2Factory(factory).getPair(address(companion), address(weth));
+        address expectedPoolToken = IUniswapV2Factory(factory).getPair(address(companion), address(weth));
 
-        // Verify the pool address
-        require(poolToken != address(0), "Pool address verification failed");
+        // Validate the pool address
+        require(expectedPoolToken != address(0), "Pool address verification failed");
 
-        return (IUniswapV2Pair(poolToken), ERC20(address(companion)));
+        return (IUniswapV2Pair(expectedPoolToken), ERC20(address(companion)));
     }
 }

@@ -35,10 +35,10 @@ contract Migrator is IMigrator {
     IUniswapV2Factory public immutable factory;
 
     constructor(address wethAddress, address balancerVaultAddress, address routerAddress) {
-        weth = WETH(payable(wethAddress));
+        weth =          WETH(payable(wethAddress));
         balancerVault = IVault(balancerVaultAddress);
-        router = IUniswapV2Router02(routerAddress);
-        factory = IUniswapV2Factory(router.factory());
+        router =        IUniswapV2Router02(routerAddress);
+        factory =       IUniswapV2Factory(router.factory());
     }
     
     /**
@@ -55,7 +55,7 @@ contract Migrator is IMigrator {
         (IERC20[] memory balancerPoolTokens, /* uint256[] memory balances */, /* uint256 lastChangeBlock */) = balancerVault.getPoolTokens(poolId);
         require(balancerPoolTokens.length == 2, "Invalid balancer pool");
 
-        // Find which token is WETH and which is the companion token
+        // Find the companion token
         IERC20 companionToken;
         if (balancerPoolTokens[0] == IERC20(address(weth))) {
             companionToken = balancerPoolTokens[1];
@@ -66,7 +66,7 @@ contract Migrator is IMigrator {
             revert("Balancer pool must contain WETH");
         }
 
-        // Verify there is a matching UniV2 pool
+        // Verify there is a matching UniV2 pool (ordering is handled upstream by the factory)
         address poolToken = factory.getPair(address(companionToken), address(weth));
 
         require(poolToken != address(0), "Pool address verification failed");
@@ -103,6 +103,7 @@ contract Migrator is IMigrator {
                 kind: IVault.SwapKind.GIVEN_IN,
                 assetIn:  IAsset(address(weth)),
                 assetOut: IAsset(address(companionToken)),
+                // Swap the amount of WETH not needed for the Balancer pool deposit
                 amount: weth.balanceOf(address(this)) - params.wethRequired,
                 userData: bytes("")
             }),
@@ -121,6 +122,8 @@ contract Migrator is IMigrator {
         assets[1] = IAsset(address(balancerPoolTokens[1]));
 
         uint256[] memory maximumAmountsIn = new uint256[](2);
+        
+        // Make sure the amounts in are in the correct order
         if (balancerPoolTokens[0] == IERC20(address(weth))) {
             maximumAmountsIn[0] = weth.balanceOf(address(this));
             maximumAmountsIn[1] = companionToken.balanceOf(address(this));
