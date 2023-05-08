@@ -3,24 +3,16 @@ name: test
 on: [pull_request]
 
 jobs:
-    check:
-        strategy:
-            fail-fast: true
-
-        name: Runs foundry tests for migrator
+    forge-tests:
+        name: Runs foundry tests and coverage report
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v3
-              with:
-                  submodules: recursive
+            - uses: actions/checkout@v2
 
             - name: Install Foundry
-              uses: foundry-rs/foundry-toolchain@v1
+              uses: onbjerg/foundry-toolchain@v1
               with:
                   version: nightly
-
-            - name: Install submodules
-              run: git submodule update --init --recursive
 
             - name: Install dependencies
               run: forge install
