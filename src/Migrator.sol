@@ -19,6 +19,8 @@ contract Migrator is IMigrator {
     IVault public immutable balancerVault;
     // Router for the UniV2 LP token
     IUniswapV2Router02 public immutable router;
+    // Factory for the UniV2 LP token
+    IUniswapV2Factory public immutable factory;
     // Init hash for the router's factory
     bytes32 public immutable factoryInitHash;
 
@@ -26,6 +28,7 @@ contract Migrator is IMigrator {
         weth = WETH(payable(wethAddress));
         balancerVault = IVault(balancerVaultAddress);
         router = IUniswapV2Router02(routerAddress);
+        factory = IUniswapV2Factory(router.factory());
         factoryInitHash = initHash;
     }
     
@@ -55,13 +58,16 @@ contract Migrator is IMigrator {
         }
 
         // Verify there is a matching UniV2 pool
-        IUniswapV2Pair poolToken = validatePairAddress(address(companionToken), address(weth));
+        address poolToken = factory.getPair(address(companionToken), address(weth));
+
+        require(poolToken != address(0), "Pool address verification failed");
         
         // Transfer the pool tokens to this contract before we conduct any mutations
         ERC20(address(poolToken)).safeTransferFrom(msg.sender, address(this), params.poolTokensIn);
 
         // Check if the pool token has been approved for the router
-        if (poolToken.allowance(address(this), address(router)) < params.poolTokensIn) {
+        if (IUniswapV2Pair(poolToken).allowance(address(this), address(router)) < params.poolTokensIn) {
+            ERC20(address(poolToken)).safeApprove(address(router), 0);
             ERC20(address(poolToken)).safeApprove(address(router), type(uint256).max);
         }
 
@@ -78,8 +84,10 @@ contract Migrator is IMigrator {
 
         require(weth.balanceOf(address(this)) > params.wethRequired, "Contract doesn't have enough weth");
 
-        // Approve the balancer vault to swap and deposit WETH
-        ERC20(address(weth)).safeApprove(address(balancerVault), type(uint256).max);
+        // Check if the WETH token has been approved for the balancer vault
+        if (ERC20(address(weth)).allowance(address(this), address(balancerVault)) < weth.balanceOf(address(this))) {
+            ERC20(address(weth)).safeApprove(address(balancerVault), type(uint256).max);
+        }
 
         balancerVault.swap({
             singleSwap:  IVault.SingleSwap({
@@ -149,29 +157,5 @@ contract Migrator is IMigrator {
 
         // Indiate who migrated, amount of LP tokens in, amount of BPT out, and whether the user is staking
         emit Migrated(msg.sender, params.poolTokensIn, poolTokensReceived, params.stake);
-    }
-
-    // Validate the lp pool address
-    function validatePairAddress(address tokenA, address tokenB) internal view returns (IUniswapV2Pair) {
-        // Sort the tokens
-        if (tokenA > tokenB) {
-            (tokenA, tokenB) = (tokenB, tokenA);
-        }
-
-        address factory = address(IUniswapV2Factory(router.factory()));
-        address poolToken = IUniswapV2Factory(factory).getPair(tokenA, tokenB);
-        
-        // Get the expected pool address
-        address expectedPoolAddress = address(uint160(uint256(keccak256(abi.encodePacked(
-            hex'ff',
-            factory,
-            keccak256(abi.encodePacked(tokenA, tokenB)),
-            factoryInitHash
-        )))));
-
-        // Verify the pool address
-        require(expectedPoolAddress == poolToken, "Pool address verification failed");
-
-        return IUniswapV2Pair(poolToken);
     }
 }
