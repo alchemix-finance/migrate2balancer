@@ -21,6 +21,6 @@ jobs:
 
             - name: Run tests and coverage
               env:
-                  ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
+                  ALCHEMY_API_MAINNET_KEY: ${{ secrets.ALCHEMY_API_MAINNET_KEY }}
                   TEST_PROFILE: default
               run: ./test.sh
