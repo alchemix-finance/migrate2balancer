@@ -81,7 +81,7 @@ test_file_block_debug_test :; FOUNDRY_PROFILE=$(PROFILE) forge test $(FORK_URL) 
 # shortcuts for deploying contracts
 
 # add constructor args if needed
-ARGS=--constructor-args "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" "0xBA12222222228d8Ba445958a75a0704d566BF2C8" "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F"
+ARGS=--constructor-args 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 0xBA12222222228d8Ba445958a75a0704d566BF2C8 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F
 
 # etherscan verification
 VERIFY=--etherscan-api-key $(ETHERSCAN_API_KEY) --verify
@@ -93,7 +93,7 @@ KEY=--private-key $(PRIVATE_KEY)
 DEPLOY_MAINNET=--rpc-url $(RPC) $(ARGS) $(KEY) $(VERIFY) src/$(FILE).sol:$(FILE)
 
 # Sepolia deployment command
-DEPLOY_SEPOLIA=--rpc-url $(TESTNET_RPC)  $(ARGS) $(KEY) $(VERIFY) src/$(FILE).sol:$(FILE)
+DEPLOY_SEPOLIA=--rpc-url $(TESTNET_RPC) $(ARGS) $(KEY) $(VERIFY) src/$(FILE).sol:$(FILE)
 
 # Deploy a contract to mainnet (assumes file and contract name match) "make deploy_mainnet FILE=<filename>
 deploy_mainnet :; forge create $(DEPLOY_MAINNET)
