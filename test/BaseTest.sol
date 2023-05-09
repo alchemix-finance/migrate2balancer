@@ -1,98 +1,92 @@
 // SPDX-License-Identifier: GPL-3
-pragma solidity ^0.8.15;
+pragma solidity 0.8.19;
 
-import "lib/forge-std/src/console2.sol";
 import "./utils/DSTestPlus.sol";
-import "./utils/MigratorHarness.sol";
+import "./utils/MigrationCalcs.sol";
+import "lib/forge-std/src/console2.sol";
+
 import "src/Migrator.sol";
-import "src/interfaces/IMigrator.sol";
+import "src/interfaces/balancer/IManagedPool.sol";
+import "src/interfaces/balancer/WeightedMath.sol";
+import "src/interfaces/chainlink/AggregatorV3Interface.sol";
 
 contract BaseTest is DSTestPlus {
     Migrator public migrator;
-    MigratorHarness public migratorHarness;
+    MigrationCalcs public migrationCalcs;
 
-    // Initialization parameters
-    WETH public weth = WETH(payable(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2));
-    IERC20 public token = IERC20(0xdBdb4d16EdA451D0503b854CF79D55697F90c8DF);
-    IERC20 public balancerPoolToken = IERC20(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
-    IERC20 public auraDepositToken = IERC20(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
-    IUniswapV2Pair public sushiLpToken = IUniswapV2Pair(0xC3f279090a47e80990Fe3a9c30d24Cb117EF91a8);
-    IRewardPool4626 public auraPool = IRewardPool4626(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
-    AggregatorV3Interface public tokenPrice = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
-    IUniswapV2Router02 public sushiRouter = IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
-    IVault public balancerVault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
-
-    // Test variables
     address public user;
     uint256 public userPrivateKey = 0xBEEF;
-    uint256 public TOKEN_1 = 1e18;
-    uint256 public TOKEN_100K = 1e23;
-    uint256 public TOKEN_1M = 1e24;
+    uint256 public slippage = 10;
     uint256 public BPS = 10000;
-    uint256 public unwrapSlippage = 10;
 
-    IMigrator.InitializationParams public params =
-        IMigrator.InitializationParams(
-            address(weth),
-            address(token),
-            address(balancerPoolToken),
-            address(auraDepositToken),
-            address(sushiLpToken),
-            address(auraPool),
-            address(tokenPrice),
-            address(sushiRouter),
-            address(balancerVault)
-        );
+    ERC20 public companionToken;
+    IUniswapV2Pair public poolToken;
 
+    IBasePool public balancerPoolToken = IBasePool(0xf16aEe6a71aF1A9Bc8F56975A4c2705ca7A782Bc);
+    IRewardPool4626 public auraPool = IRewardPool4626(0x8B227E3D50117E80a02cd0c67Cd6F89A8b7B46d7);
+    AggregatorV3Interface public wethPriceFeed = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
+    AggregatorV3Interface public tokenPriceFeed = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
+
+    // Constructor parameters
+    ERC20 public weth = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    address public balancerVault = address(balancerPoolToken.getVault());
+    address public router = 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F;
+    
     function setUp() public {
         user = hevm.addr(userPrivateKey);
 
-        migrator = new Migrator(params);
+        // Get the UniV2 pool and companion token addresses given any balancer pool token
+        (poolToken, companionToken) = getPairAddress(balancerPoolToken);
+        
+        migrationCalcs = new MigrationCalcs();
 
-        migratorHarness = new MigratorHarness(params);
+        migrator = new Migrator(address(weth), balancerVault, router);
     }
 
     /**
-     * @notice Calculate the min amount of TOKEN and WETH for a given SLP amount
-     * @param _slpAmount The amount of SLP
-     * @return Return values for min amount out of TOKEN and WETH with unwrap slippage
-     * @dev Calculation used for testing, in production values should be calculated in UI
+     * @notice Get the migration calculation parameters for a given migration
+     * @param stakeBpt Whether to stake BPT or not
+     * @param amount Amount of UniV2 LP tokens to migrate
      */
-    function calculateSlpAmounts(uint256 _slpAmount) public view returns (uint256, uint256) {
-        uint256 tokenPriceEth = migratorHarness.exposed_tokenPrice();
-        uint256 wethPriceUsd = _wethPrice();
-        uint256 slpSupply = sushiLpToken.totalSupply();
-        (uint256 wethReserves, uint256 tokenReserves, ) = sushiLpToken.getReserves();
+    function getMigrationCalcParams(bool stakeBpt, uint256 amount) internal view returns (MigrationCalcs.MigrationCalcParams memory) {
+        MigrationCalcs.MigrationCalcParams memory migrationCalcParams = MigrationCalcs.MigrationCalcParams({
+            stakeBpt:           stakeBpt,
+            amount:             amount,
+            slippage:           slippage,
+            poolToken:          poolToken,
+            balancerPoolToken:  balancerPoolToken,
+            auraPool:           auraPool,
+            wethPriceFeed:      wethPriceFeed,
+            tokenPriceFeed:     tokenPriceFeed
+        });
 
-        // Convert reserves into current USD price
-        uint256 tokenReservesUsd = ((tokenReserves * tokenPriceEth) * wethPriceUsd) / 1 ether;
-        uint256 wethReservesUsd = wethReserves * wethPriceUsd;
-
-        // Get amounts in USD given the amount of SLP with slippage
-        uint256 amountTokenUsd = (((_slpAmount * tokenReservesUsd) / slpSupply) * (BPS - unwrapSlippage)) / BPS;
-        uint256 amountWethUsd = (((_slpAmount * wethReservesUsd) / slpSupply) * (BPS - unwrapSlippage)) / BPS;
-
-        // Return tokens denominated in ETH
-        uint256 amountTokenMin = (amountTokenUsd * 1 ether) / (tokenPriceEth * wethPriceUsd);
-        uint256 amountWethMin = (amountWethUsd) / wethPriceUsd;
-
-        return (amountTokenMin, amountWethMin);
+        return migrationCalcParams;
     }
 
     /**
-     * @notice Get the price of weth
-     * @dev Make sure price is not stale or incorrect
-     * @return Return the correct price
+     * @notice Get the UniV2 pool and companion token addresses for a given balancer pool
+     * @param balancerToken Address of the balancer pool token
      */
-    function _wethPrice() internal view returns (uint256) {
-        AggregatorV3Interface wethPrice = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
+    function getPairAddress(IBasePool balancerToken) internal view returns (IUniswapV2Pair, ERC20) {
+        bytes32 poolId = balancerToken.getPoolId();
+        (IERC20[] memory balancerPoolTokens, , ) = IVault(balancerVault).getPoolTokens(poolId);
 
-        (uint80 roundId, int256 price, , uint256 timestamp, uint80 answeredInRound) = wethPrice.latestRoundData();
+        IERC20 companion;
+        if (balancerPoolTokens[0] == IERC20(address(weth))) {
+            companion = balancerPoolTokens[1];
+        } else if (balancerPoolTokens[1] == IERC20(address(weth))) {
+            companion = balancerPoolTokens[0];
+        } else {
+            // If neither token is WETH, then the migration will fail
+            revert("Balancer pool must contain WETH");
+        }
 
-        require(answeredInRound >= roundId, "Stale price");
-        require(timestamp != 0, "Round not complete");
-        require(price > 0, "Chainlink answer reporting 0");
+        address factory = address(IUniswapV2Factory(IUniswapV2Router02(router).factory()));
+        address expectedPoolToken = IUniswapV2Factory(factory).getPair(address(companion), address(weth));
 
-        return uint256(price);
+        // Validate the pool address
+        require(expectedPoolToken != address(0), "Pool address verification failed");
+
+        return (IUniswapV2Pair(expectedPoolToken), ERC20(address(companion)));
     }
 }

@@ -3,33 +3,24 @@ name: test
 on: [pull_request]
 
 jobs:
-  check:
-    strategy:
-      fail-fast: true
+    forge-tests:
+        name: Runs foundry tests and coverage report
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v2
 
-    name: Runs foundry tests for sushi to balancer migrator 
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
+            - name: Install Foundry
+              uses: onbjerg/foundry-toolchain@v1
+              with:
+                  version: nightly
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
-      
-      - name: Install submodules
-        run: git submodule update --init --recursive
+            - name: Install dependencies
+              run: forge install
 
-      - name: Run Forge build
-        run: |
-          forge --version
-          forge build --sizes
-        id: build
+            - run: chmod 755 ./test.sh
 
-      - name: Run tests and coverage
-        env:
-          ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
-          TEST_PROFILE: default
-          run: ./test.sh
+            - name: Run tests and coverage
+              env:
+                  ALCHEMY_API_MAINNET_KEY: ${{ secrets.ALCHEMY_API_MAINNET_KEY }}
+                  TEST_PROFILE: default
+              run: ./test.sh
