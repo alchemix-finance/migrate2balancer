@@ -153,19 +153,19 @@ contract Migrator is IMigrator {
         });
 
         // Get the amount of BPT received since joinPool does not return the amount
-        uint256 poolTokensReceived = params.balancerPoolToken.balanceOf(address(this));
+        uint256 balancerPoolTokensReceived = params.balancerPoolToken.balanceOf(address(this));
 
         // If the user is staking, we deposit BPT into the Aura pool on the user's behalf
         // Otherwise, we transfer the BPT to the user
         if (params.stake) {
-            ERC20(address(params.balancerPoolToken)).safeApprove(address(params.auraPool), poolTokensReceived);
-            uint256 shares = params.auraPool.deposit(poolTokensReceived, msg.sender);
+            ERC20(address(params.balancerPoolToken)).safeApprove(address(params.auraPool), balancerPoolTokensReceived);
+            uint256 shares = params.auraPool.deposit(balancerPoolTokensReceived, msg.sender);
             require(shares >= params.amountAuraSharesMinimum, "Invalid auraBpt amount out");
         } else {
-            ERC20(address(params.balancerPoolToken)).safeTransfer(msg.sender, poolTokensReceived);
+            ERC20(address(params.balancerPoolToken)).safeTransfer(msg.sender, balancerPoolTokensReceived);
         }
 
-        // Indiate who migrated, amount of LP tokens in, amount of BPT out, and whether the user is staking
-        emit Migrated(msg.sender, params.poolTokensIn, poolTokensReceived, params.stake);
+        // Indicate who migrated, UniV2 pool source, balancer pool destination, amounts in and out, and whether the user is staking
+        emit Migrated(msg.sender, poolToken, address(params.balancerPoolToken), params.poolTokensIn, balancerPoolTokensReceived, params.stake);
     }
 }
