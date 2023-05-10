@@ -3,47 +3,32 @@ pragma solidity 0.8.19;
 
 import { ERC20 } from "lib/solmate/src/tokens/ERC20.sol";
 
-import { IUniswapV2Pair } from "src/interfaces/univ2/IUniswapV2Pair.sol";
 import { IVault } from "src/interfaces/balancer/IVault.sol";
-import { IBasePool } from "src/interfaces/balancer/IBasePool.sol";
 import { IManagedPool } from "src/interfaces/balancer/IManagedPool.sol";
 import { WeightedMath } from "src/interfaces/balancer/WeightedMath.sol";
+import { IBasePool } from "src/interfaces/balancer/IBasePool.sol";
 import { IRewardPool4626 } from "src/interfaces/aura/IRewardPool4626.sol";
+import { IUniswapV2Pair } from "src/interfaces/univ2/IUniswapV2Pair.sol";
 import { AggregatorV3Interface } from "src/interfaces/chainlink/AggregatorV3Interface.sol";
 
 import { IMigrator } from "src/interfaces/IMigrator.sol";
+import { IMigrationCalcs } from "src/interfaces/IMigrationCalcs.sol";
 
-contract MigrationCalcs {
+/**
+ * @title Migration Calculations
+ * @notice Tool to query the migration parameters for a given migration
+ * @dev The output of this contract are the parameters for the migration function in Migrator.sol
+ */
+contract MigrationCalcs is IMigrationCalcs {
     uint256 internal immutable BPS = 10000;
 
-    // Parameters required to make migration calculations
-    struct MigrationCalcParams {
-        // Whether to stake the BPT in the Aura pool
-        bool stakeBpt;
-        // Amount of UniV2 LP tokens to migrate
-        uint256 amount;
-        // Slippage tolerance
-        uint256 slippage;
-        // UniV2 LP token address
-        IUniswapV2Pair poolToken;
-        // 80/20 TOKEN/WETH Balancer Pool Token
-        IBasePool balancerPoolToken;
-        // ERC4626 Aura pool address
-        IRewardPool4626 auraPool;
-        // Chainlink WETH/USD price feed
-        AggregatorV3Interface wethPriceFeed;
-        // Chainlink Token/WETH price feed
-        AggregatorV3Interface tokenPriceFeed;
-    }
-
     /**
-     * @notice Get the parameters required for calling the migration function
-     * @param params MigrationCalcParams required to make migration calculations
+     * @inheritdoc IMigrationCalcs
      */
     function getMigrationParams(
         MigrationCalcParams calldata params
     ) external view returns (IMigrator.MigrationParams memory) {
-        // Calculate min amount of Token and WETH from UniV2 LP
+        // Calculate min amount of TOKEN and WETH from unwrapping UniV2 LP
         (uint256 amountTokenMin, uint256 amountWethMin) = calculateLpAmounts(
             params.slippage,
             params.amount,
@@ -52,17 +37,18 @@ contract MigrationCalcs {
             params.tokenPriceFeed
         );
 
-        // Calculate amount of WETH given amount of Token to create 80/20 TOKEN/WETH balance
+        // Given an amount of TOKEN, calculate amount of WETH needed to create 80/20 TOKEN/WETH balance
         uint256 wethRequired = calculateWethRequired(amountTokenMin, params.balancerPoolToken, params.tokenPriceFeed);
 
-        // Calculate amount of Tokens out given the excess amount of WETH due to 80/20 TOKEN/WETH rebalance (amountWethMin is always > wethRequired)
+        // Calculate amount of TOKEN out given the excess amount of WETH due to 80/20 TOKEN/WETH rebalance (amountWethMin is always > wethRequired)
         uint256 minAmountTokenOut = calculateTokenAmountOut(
+            // Excess amount of WETH we are swapping for TOKEN
             amountWethMin - wethRequired,
             params.slippage,
             params.tokenPriceFeed
         );
 
-        // Calculate expected amount of BPT out given Tokens and WETH
+        // Calculate expected amount of BPT out given TOKEN and WETH
         uint256 amountBptOut = calculateBptAmountOut(
             // Original and predicted swapped amounts of companion token
             amountTokenMin + minAmountTokenOut,
@@ -100,7 +86,7 @@ contract MigrationCalcs {
      * @param slippage Slippage tolerance
      * @param lpAmount The amount of UniV2 LP
      * @param poolToken UniV2 LP token address
-     * @param tokenPriceFeed Chainlink Token/WETH price feed
+     * @param tokenPriceFeed Chainlink TOKEN/WETH price feed
      * @param wethPriceFeed Chainlink WETH/USD price feed
      * @return Return values for min amount out of TOKEN and WETH with unwrap slippage
      */
@@ -132,7 +118,7 @@ contract MigrationCalcs {
      * @notice Given an amount of a companion token, calculate the amount of WETH to create an 80/20 TOKEN/WETH ratio
      * @param tokenAmount Amount of companion token
      * @param balancerPoolToken 80/20 TOKEN/WETH Balancer Pool Token
-     * @param tokenPriceFeed Chainlink Token/WETH price feed
+     * @param tokenPriceFeed Chainlink TOKEN/WETH price feed
      */
     function calculateWethRequired(
         uint256 tokenAmount,
@@ -145,10 +131,10 @@ contract MigrationCalcs {
     }
 
     /**
-     * @notice Min amount of Token swapped for WETH
+     * @notice Min amount of TOKEN swapped for WETH
      * @param wethAmount Amount of WETH to swap
      * @param slippage Slippage tolerance
-     * @param tokenPriceFeed Chainlink Token/WETH price feed
+     * @param tokenPriceFeed Chainlink TOKEN/WETH price feed
      * @dev This is the excess WETH swapped once we know expected rebalanced 80/20 amounts
      */
     function calculateTokenAmountOut(
@@ -164,7 +150,7 @@ contract MigrationCalcs {
     /**
      * @notice Given an amount of tokens in, calculate the expected BPT out
      * @param wethAmountIn Amount of WETH
-     * @param tokenAmountIn Amount of Token
+     * @param tokenAmountIn Amount of TOKEN
      * @param balancerPoolToken Balancer pool token
      * @param balancerVault Balancer vault
      */

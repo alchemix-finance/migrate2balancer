@@ -9,7 +9,7 @@ FILE=
 TEST=
 
 # block to test from 
-BLOCK=16921262
+BLOCK=17230496
 
 # foundry test profile to run
 PROFILE=$(TEST_PROFILE)
@@ -80,7 +80,7 @@ test_file_block_debug_test :; FOUNDRY_PROFILE=$(PROFILE) forge test $(FORK_URL) 
 
 # shortcuts for deploying contracts
 
-# add constructor args if needed
+# add constructor args as needed (weth, balancer vault, sushi router)
 ARGS=--constructor-args 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 0xBA12222222228d8Ba445958a75a0704d566BF2C8 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F
 
 # etherscan verification
@@ -95,7 +95,7 @@ DEPLOY_MAINNET=--rpc-url $(RPC) $(ARGS) $(KEY) $(VERIFY) src/$(FILE).sol:$(FILE)
 # Sepolia deployment command
 DEPLOY_SEPOLIA=--rpc-url $(TESTNET_RPC) $(ARGS) $(KEY) $(VERIFY) src/$(FILE).sol:$(FILE)
 
-# Deploy a contract to mainnet (assumes file and contract name match) "make deploy_mainnet FILE=<filename>
+# Deploy a contract to mainnet (assumes file and contract name match) "make deploy_mainnet FILE=<filename>"
 deploy_mainnet :; forge create $(DEPLOY_MAINNET)
 
 # Deploy a contract to sepolia (assumes file and contract name match) "make deploy_sepolia FILE=<filename>"

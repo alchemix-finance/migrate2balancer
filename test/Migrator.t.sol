@@ -19,7 +19,7 @@ contract MigratorTest is BaseTest {
         assertEq(auraPool.balanceOf(user), 0);
 
         // Get calculation parameters
-        MigrationCalcs.MigrationCalcParams memory migrationCalcParams = getMigrationCalcParams(true, amount);
+        IMigrationCalcs.MigrationCalcParams memory migrationCalcParams = getMigrationCalcParams(true, amount);
 
         // Get migration parameters
         IMigrator.MigrationParams memory migrationParams = migrationCalcs.getMigrationParams(migrationCalcParams);
@@ -59,7 +59,7 @@ contract MigratorTest is BaseTest {
         assertEq(auraPool.balanceOf(user), 0);
 
         // Get calculation parameters
-        MigrationCalcs.MigrationCalcParams memory migrationCalcParams = getMigrationCalcParams(false, amount);
+        IMigrationCalcs.MigrationCalcParams memory migrationCalcParams = getMigrationCalcParams(false, amount);
 
         // Get migration parameters
         IMigrator.MigrationParams memory migrationParams = migrationCalcs.getMigrationParams(migrationCalcParams);

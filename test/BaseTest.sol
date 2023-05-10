@@ -2,10 +2,10 @@
 pragma solidity 0.8.19;
 
 import "./utils/DSTestPlus.sol";
-import "./utils/MigrationCalcs.sol";
 import "lib/forge-std/src/console2.sol";
 
 import "src/Migrator.sol";
+import "src/MigrationCalcs.sol";
 import "src/interfaces/balancer/IManagedPool.sol";
 import "src/interfaces/balancer/WeightedMath.sol";
 import "src/interfaces/chainlink/AggregatorV3Interface.sol";
@@ -27,7 +27,7 @@ contract BaseTest is DSTestPlus {
     AggregatorV3Interface public wethPriceFeed = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
     AggregatorV3Interface public tokenPriceFeed = AggregatorV3Interface(0x194a9AaF2e0b67c35915cD01101585A33Fe25CAa);
 
-    // Constructor parameters
+    // Migrator constructor parameters
     ERC20 public weth = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     address public balancerVault = address(balancerPoolToken.getVault());
     address public router = 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F;
@@ -48,8 +48,8 @@ contract BaseTest is DSTestPlus {
      * @param stakeBpt Whether to stake BPT or not
      * @param amount Amount of UniV2 LP tokens to migrate
      */
-    function getMigrationCalcParams(bool stakeBpt, uint256 amount) internal view returns (MigrationCalcs.MigrationCalcParams memory) {
-        MigrationCalcs.MigrationCalcParams memory migrationCalcParams = MigrationCalcs.MigrationCalcParams({
+    function getMigrationCalcParams(bool stakeBpt, uint256 amount) internal view returns (IMigrationCalcs.MigrationCalcParams memory) {
+        IMigrationCalcs.MigrationCalcParams memory migrationCalcParams = IMigrationCalcs.MigrationCalcParams({
             stakeBpt:           stakeBpt,
             amount:             amount,
             slippage:           slippage,

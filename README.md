@@ -7,9 +7,9 @@ Migrator.sol facilitates migrating UniV2 LPs to an 80/20 Balancer LP with the op
 -   LP: UniV2 LP Token
 -   BPT: 20WETH-80TOKEN Balancer Pool Token
 -   auraBPT: 20WETH-80TOKEN Aura Deposit Pool
--   See `MigrationCalcs.sol` for examples of the calculations that need to be made before calling `migrate()`
--   The calculations should then be the parameters found in `IMigrator.sol` to migrate
--   The Migrator will unwrap the UniV2 LP, swap the 50/50 TOKEN/WETH balance for an 80/20 TOKEN/WETH balance, deposit TOKEN and WETH into a Balancer pool, and either deposit the newly minted BPT tokens into an Aura pool sending `msg.sender` auraBPT, or transfer the BPT directly to the `msg.sender`
+-   See `MigrationCalcs.sol` for the calculations that need to be made and passed into `migrate()`
+-   The calculations or output of `getMigrationParams()` should be used as values for `MigrationParams` in `IMigrator.sol`
+-   The Migrator will unwrap the UniV2 LP tokens, rebalance the 50/50 TOKEN/WETH balance to an 80/20 TOKEN/WETH balance by swapping extra WETH for TOKEN, deposit the rebalanced 80/20 TOKEN/WETH amount into a Balancer pool, and either deposit the newly minted BPT tokens into an Aura pool sending `msg.sender` auraBPT, or transfer the BPT directly to the `msg.sender`
 
 ## Getting Started
 
