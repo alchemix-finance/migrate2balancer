@@ -11,6 +11,11 @@ Migrator.sol facilitates migrating UniV2 LPs to an 80/20 Balancer LP with the op
 -   The calculations or output of `getMigrationParams()` should be used as values for `MigrationParams` in `IMigrator.sol`
 -   The Migrator will unwrap the UniV2 LP tokens, rebalance the 50/50 TOKEN/WETH balance to an 80/20 TOKEN/WETH balance by swapping extra WETH for TOKEN, deposit the rebalanced 80/20 TOKEN/WETH amount into a Balancer pool, and either deposit the newly minted BPT tokens into an Aura pool sending `msg.sender` auraBPT, or transfer the BPT directly to the `msg.sender`
 
+## Deployments
+
+Migrator: [https://etherscan.io/address/0xa311f930f603567d656b3992d36e4cc384d85c5d](https://etherscan.io/address/0xa311f930f603567d656b3992d36e4cc384d85c5d)
+MigrationCalcs: [https://etherscan.io/address/0xe7ad39d1891100c734ee78a777a0aa99aacd12da](https://etherscan.io/address/0xe7ad39d1891100c734ee78a777a0aa99aacd12da)
+
 ## Getting Started
 
 ### Create a `.env` file with the following environment variables
